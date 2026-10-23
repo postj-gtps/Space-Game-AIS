@@ -39,7 +39,7 @@ export class ParticleSystem {
       color,
       life: 1.0,
       decay: 0.04 + Math.random() * 0.03,
-      size: 2 + Math.random() * 3,
+      size: 3 + Math.random() * 4,
     });
   }
 
@@ -511,8 +511,8 @@ export class PlayerShip {
         }
       }
 
-      this.vx -= dirX * 0.15;
-      this.vy -= dirY * 0.15;
+      this.vx -= dirX * 0.075;
+      this.vy -= dirY * 0.075;
 
       soundEngine.playLaser();
     }
@@ -545,13 +545,13 @@ export class PlayerShip {
     } else {
       // Retro Vector Fallback
       ctx.beginPath();
-      ctx.moveTo(22, 0);
-      ctx.lineTo(-14, 16);
-      ctx.lineTo(-10, 8);
-      ctx.lineTo(-16, 5);
-      ctx.lineTo(-16, -5);
-      ctx.lineTo(-10, -8);
-      ctx.lineTo(-14, -16);
+      ctx.moveTo(44, 0);
+      ctx.lineTo(-28, 32);
+      ctx.lineTo(-20, 16);
+      ctx.lineTo(-32, 10);
+      ctx.lineTo(-32, -10);
+      ctx.lineTo(-20, -16);
+      ctx.lineTo(-28, -32);
       ctx.closePath();
       ctx.fillStyle = '#061325';
       ctx.fill();

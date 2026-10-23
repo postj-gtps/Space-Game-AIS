@@ -1,0 +1,6 @@
+{
+  "summary":  "Implementation plan for scaling the player ship to 2x size, including sprite texture scale, anchor point coordinates, collision boundaries, and particle plume alignments.",
+  "updatedAt":  "2026-10-23T23:03:19.083876449Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

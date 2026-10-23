@@ -404,14 +404,10 @@ export const App: React.FC = () => {
             radarCtx.lineWidth = 1;
             radarCtx.beginPath();
             radarCtx.arc(center, center, center * 0.4, 0, Math.PI * 2);
-            radarCtx.arc(center, center, center * 0.8, 0, Math.PI * 2);
             radarCtx.stroke();
 
-            const sweepAngle = (Date.now() * 0.003) % (Math.PI * 2);
             radarCtx.beginPath();
-            radarCtx.moveTo(center, center);
-            radarCtx.lineTo(center + Math.cos(sweepAngle) * center, center + Math.sin(sweepAngle) * center);
-            radarCtx.strokeStyle = 'rgba(0, 240, 255, 0.25)';
+            radarCtx.arc(center, center, center * 0.8, 0, Math.PI * 2);
             radarCtx.stroke();
 
             radarCtx.fillStyle = '#6688aa';
