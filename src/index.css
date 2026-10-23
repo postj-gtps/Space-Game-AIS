@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+* {
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #02040a;
+  font-family: 'Courier New', Courier, monospace;
+  color: #00f0ff;
+}
+
+#gameCanvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  cursor: crosshair;
+}
+
+.hud-panel {
+  background: rgba(4, 12, 24, 0.75);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.15), inset 0 0 10px rgba(0, 240, 255, 0.05);
+}
+
+.glow-text {
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
+}
+
+.glow-red {
+  text-shadow: 0 0 8px rgba(255, 50, 50, 0.8);
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.4);
+  border-radius: 2px;
+}
+
+.touch-btn {
+  touch-action: manipulation;
+}
+
+.touch-btn:active {
+  background-color: rgba(0, 240, 255, 0.4) !important;
+}

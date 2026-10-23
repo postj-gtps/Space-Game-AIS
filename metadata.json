@@ -1,0 +1,8 @@
+{
+  "name": "Solar Winds",
+  "description": "Dynamic asset library space combat game engine with procedural starfield, tactical radar, telemetry HUD, physics, and custom ship loadouts.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

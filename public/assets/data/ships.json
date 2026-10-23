@@ -1,0 +1,37 @@
+{
+  "starter_ship": {
+    "id": "starter_ship",
+    "name": "SF-77 Vanguard",
+    "description": "Standard issue heavy fighter equipped with dual wing-mounted plasma cannons and tri-jet sublight thrusters.",
+    "sprite": {
+      "src": "assets/images/ships/ship-starter.png",
+      "scale": 0.055,
+      "rotationOffset": 180
+    },
+    "stats": {
+      "maxSpeed": 14,
+      "thrustPower": 0.18,
+      "reverseThrustPower": 0.10,
+      "rotationSpeed": 0.065,
+      "maxShields": 100,
+      "laserCooldown": 110,
+      "laserHeatLimit": 95,
+      "collisionRadius": 22
+    },
+    "anchors": {
+      "muzzles": [
+        { "x": 28, "y": -8 },
+        { "x": 28, "y": 8 }
+      ],
+      "thrusters": [
+        { "x": -22, "y": -12, "color": "#00f0ff" },
+        { "x": -26, "y": 0, "color": "#00f0ff" },
+        { "x": -22, "y": 12, "color": "#00f0ff" }
+      ],
+      "rcsJets": [
+        { "x": 15, "y": -14, "color": "#ff9900" },
+        { "x": 15, "y": 14, "color": "#ff9900" }
+      ]
+    }
+  }
+}
