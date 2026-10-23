@@ -1,4 +1,4 @@
-# Solar Winds - Dynamic Asset Library Engine
+# Space Game Dynamic Asset Library Engine
 
 A React + TypeScript space combat game engine rewritten from a static prototype to a modern SPA with modular architecture, Web Audio API synthesis, dynamic asset catalog integration, and tactical HUD telemetry.
 
