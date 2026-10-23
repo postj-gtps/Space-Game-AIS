@@ -223,7 +223,7 @@ export class TargetDrone {
   public y: number;
   public vx: number;
   public vy: number;
-  public radius = 16;
+  public radius = 24;
   public angle = 0;
   public hp = 3;
 
@@ -254,21 +254,38 @@ export class TargetDrone {
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
 
-    ctx.beginPath();
-    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
-    ctx.strokeStyle = '#ff3366';
-    ctx.lineWidth = 1.5;
-    ctx.shadowColor = '#ff3366';
-    ctx.shadowBlur = 8;
-    ctx.stroke();
+    const img = AssetManager.getDroneImage();
+    if (img && img.complete && img.naturalWidth !== 0) {
+      const scale = 0.08;
+      const w = img.width * scale;
+      const h = img.height * scale;
+      ctx.drawImage(img, -w / 2, -h / 2, w, h);
 
-    ctx.beginPath();
-    ctx.moveTo(-this.radius - 4, 0);
-    ctx.lineTo(this.radius + 4, 0);
-    ctx.moveTo(0, -this.radius - 4);
-    ctx.lineTo(0, this.radius + 4);
-    ctx.strokeStyle = 'rgba(255, 51, 102, 0.5)';
-    ctx.stroke();
+      // Subtle tactical damage indicator when hit
+      if (this.hp < 3) {
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius + 3, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 51, 102, ${(3 - this.hp) * 0.35})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ff3366';
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = '#ff3366';
+      ctx.shadowBlur = 8;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(-this.radius - 4, 0);
+      ctx.lineTo(this.radius + 4, 0);
+      ctx.moveTo(0, -this.radius - 4);
+      ctx.lineTo(0, this.radius + 4);
+      ctx.strokeStyle = 'rgba(255, 51, 102, 0.5)';
+      ctx.stroke();
+    }
 
     ctx.restore();
   }

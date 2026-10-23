@@ -3,6 +3,7 @@ import { ShipsCatalog, ShipDefinition } from '../types/game';
 export class AssetManager {
   public static shipsCatalog: ShipsCatalog = {};
   public static loadedImages: Record<string, HTMLImageElement> = {};
+  public static droneImage: HTMLImageElement | null = null;
   public static isReady = false;
 
   public static fallbackCatalog: ShipsCatalog = {
@@ -77,6 +78,25 @@ export class AssetManager {
       }
     }
 
+    // Preload Enemy Drone sprite
+    const droneImg = new Image();
+    droneImg.src = '/assets/images/enemies/Enemy%20Drone.png';
+    this.droneImage = droneImg;
+    loadPromises.push(
+      new Promise((resolve) => {
+        droneImg.onload = () => resolve();
+        droneImg.onerror = () => {
+          // Fallback to unencoded or ships directory if needed
+          droneImg.src = '/assets/images/ships/Enemy%20Drone.png';
+          droneImg.onload = () => resolve();
+          droneImg.onerror = () => {
+            console.warn('Failed to load Enemy Drone sprite');
+            resolve();
+          };
+        };
+      })
+    );
+
     await Promise.all(loadPromises);
     this.isReady = true;
   }
@@ -87,5 +107,9 @@ export class AssetManager {
 
   public static getShipImage(id: string): HTMLImageElement | undefined {
     return this.loadedImages[id];
+  }
+
+  public static getDroneImage(): HTMLImageElement | null {
+    return this.droneImage;
   }
 }

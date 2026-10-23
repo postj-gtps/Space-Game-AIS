@@ -464,13 +464,16 @@ export const App: React.FC = () => {
         const heatPct = Math.round(player.laserHeat);
         const shieldPct = Math.round((player.shields / cfg.stats.maxShields) * 100);
 
+        const cartesianX = Math.round(player.x / 100) || 0;
+        const cartesianY = Math.round(-player.y / 100) || 0;
+
         setTelemetry((prev) => ({
           shipName: cfg.name,
           fps: frameCount % 30 === 0 && deltaTime > 0 ? Math.round(1 / deltaTime) : prev.fps,
           speed: currentSpeed,
           headingDeg: deg,
-          coordX: Math.floor(player.x / 100),
-          coordY: Math.floor(player.y / 100),
+          coordX: cartesianX,
+          coordY: cartesianY,
           thrustStatus,
           heatPct,
           shieldPct,
