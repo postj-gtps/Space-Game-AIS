@@ -10,6 +10,10 @@ interface HUDProps {
   audioEnabled: boolean;
   onToggleAudio: () => void;
   radarCanvasRef: React.RefObject<HTMLCanvasElement | null>;
+  zoomLevel: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onZoomReset: () => void;
   gameStarted: boolean;
   onStartGame: () => void;
   gameOver: boolean;
@@ -27,6 +31,10 @@ export const HUD: React.FC<HUDProps> = ({
   audioEnabled,
   onToggleAudio,
   radarCanvasRef,
+  zoomLevel,
+  onZoomIn,
+  onZoomOut,
+  onZoomReset,
   gameStarted,
   onStartGame,
   gameOver,
@@ -148,7 +156,7 @@ export const HUD: React.FC<HUDProps> = ({
         </div>
 
         {/* CONTROL TOGGLE BUTTONS */}
-        <div className="hud-panel p-2 rounded-lg flex gap-2 text-xs pointer-events-auto">
+        <div className="hud-panel p-2 rounded-lg flex items-center gap-2 text-xs pointer-events-auto">
           <button
             onClick={onToggleGrid}
             className="px-2 py-1 bg-cyan-950/60 hover:bg-cyan-800/50 border border-cyan-500/40 rounded text-cyan-300 transition text-[11px] cursor-pointer"
@@ -167,6 +175,32 @@ export const HUD: React.FC<HUDProps> = ({
           >
             Audio: {audioEnabled ? 'ON' : 'OFF'}
           </button>
+
+          {/* ZOOM CONTROLS */}
+          <div className="flex items-center gap-1 border-l border-cyan-500/30 pl-2">
+            <span className="text-[10px] text-slate-400">ZOOM:</span>
+            <button
+              onClick={onZoomOut}
+              title="Zoom Out (Scroll Down / Minus)"
+              className="w-5 h-5 flex items-center justify-center bg-cyan-950/80 hover:bg-cyan-800/60 border border-cyan-500/40 rounded text-cyan-300 text-xs font-bold transition active:scale-95 cursor-pointer"
+            >
+              -
+            </button>
+            <button
+              onClick={onZoomReset}
+              title="Reset Zoom to 100% (0)"
+              className="px-1.5 py-0.5 bg-cyan-950/60 hover:bg-cyan-800/50 border border-cyan-500/40 rounded text-cyan-200 text-[10px] font-mono transition cursor-pointer"
+            >
+              {Math.round(zoomLevel * 100)}%
+            </button>
+            <button
+              onClick={onZoomIn}
+              title="Zoom In (Scroll Up / Plus)"
+              className="w-5 h-5 flex items-center justify-center bg-cyan-950/80 hover:bg-cyan-800/60 border border-cyan-500/40 rounded text-cyan-300 text-xs font-bold transition active:scale-95 cursor-pointer"
+            >
+              +
+            </button>
+          </div>
         </div>
       </div>
 
@@ -199,6 +233,12 @@ export const HUD: React.FC<HUDProps> = ({
                 SPACEBAR
               </kbd>{' '}
               Fire Plasma Blaster
+            </div>
+            <div className="col-span-2 mt-0.5 text-slate-400">
+              <kbd className="px-1 py-0.5 bg-cyan-900/50 border border-cyan-500/40 rounded text-cyan-200">
+                SCROLL / +/-
+              </kbd>{' '}
+              Zoom Viewport
             </div>
           </div>
         </div>

@@ -59,6 +59,41 @@ export const App: React.FC = () => {
   const shakeDurationRef = useRef<number>(0);
   const shakeMagnitudeRef = useRef<number>(0);
 
+  // Viewport Zoom System
+  // Outer limit: 0.035 (~3.4px dot). Inner limit: ship fills the viewport (~8-10x)
+  const zoomRef = useRef<number>(1.0);
+  const targetZoomRef = useRef<number>(1.0);
+  const [hudZoom, setHudZoom] = useState<number>(1.0);
+
+  const getZoomLimits = useCallback(() => {
+    const minDim = Math.min(window.innerWidth || 800, window.innerHeight || 600);
+    const minZoom = 0.035; // Ship is just a dot
+    const maxZoom = Math.max(5.0, (minDim * 0.88) / 95); // Ship fills the screen
+    return { minZoom, maxZoom };
+  }, []);
+
+  const adjustTargetZoom = useCallback(
+    (newTarget: number) => {
+      const { minZoom, maxZoom } = getZoomLimits();
+      const clamped = Math.max(minZoom, Math.min(maxZoom, newTarget));
+      targetZoomRef.current = clamped;
+      setHudZoom(clamped);
+    },
+    [getZoomLimits]
+  );
+
+  const handleZoomIn = useCallback(() => {
+    adjustTargetZoom(targetZoomRef.current * 1.35);
+  }, [adjustTargetZoom]);
+
+  const handleZoomOut = useCallback(() => {
+    adjustTargetZoom(targetZoomRef.current / 1.35);
+  }, [adjustTargetZoom]);
+
+  const handleZoomReset = useCallback(() => {
+    adjustTargetZoom(1.0);
+  }, [adjustTargetZoom]);
+
   const triggerScreenShake = useCallback((duration = 10, magnitude = 8) => {
     shakeDurationRef.current = duration;
     shakeMagnitudeRef.current = magnitude;
@@ -121,9 +156,21 @@ export const App: React.FC = () => {
         case 'Space':
           keys.fire = true;
           break;
+        case 'Equal':
+        case 'NumpadAdd':
+          handleZoomIn();
+          break;
+        case 'Minus':
+        case 'NumpadSubtract':
+          handleZoomOut();
+          break;
+        case 'Digit0':
+        case 'Numpad0':
+          handleZoomReset();
+          break;
       }
     },
-    [handleRestartGame]
+    [handleRestartGame, handleZoomIn, handleZoomOut, handleZoomReset]
   );
 
   const handleKeyUpAction = useCallback((code: string) => {
@@ -195,12 +242,64 @@ export const App: React.FC = () => {
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
 
+    // Mouse Wheel Zoom
+    const canvas = canvasRef.current;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.15 : 0.87;
+      adjustTargetZoom(targetZoomRef.current * factor);
+    };
+
+    if (canvas) {
+      canvas.addEventListener('wheel', onWheel, { passive: false });
+    }
+
+    // Touch Pinch-to-Zoom
+    let initialPinchDist: number | null = null;
+    let initialZoom = 1.0;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        initialPinchDist = Math.hypot(dx, dy);
+        initialZoom = targetZoomRef.current;
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && initialPinchDist) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        const ratio = dist / initialPinchDist;
+        adjustTargetZoom(initialZoom * ratio);
+      }
+    };
+
+    const onTouchEnd = () => {
+      initialPinchDist = null;
+    };
+
+    if (canvas) {
+      canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+      canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+      canvas.addEventListener('touchend', onTouchEnd);
+    }
+
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      if (canvas) {
+        canvas.removeEventListener('wheel', onWheel);
+        canvas.removeEventListener('touchstart', onTouchStart);
+        canvas.removeEventListener('touchmove', onTouchMove);
+        canvas.removeEventListener('touchend', onTouchEnd);
+      }
     };
-  }, [handleKeyDownAction, handleKeyUpAction]);
+  }, [handleKeyDownAction, handleKeyUpAction, adjustTargetZoom]);
 
   // Main game loop effect
   useEffect(() => {
@@ -361,6 +460,10 @@ export const App: React.FC = () => {
           }
         }
 
+        // Viewport Zoom Interpolation
+        zoomRef.current += (targetZoomRef.current - zoomRef.current) * 0.15;
+        const currentZoom = zoomRef.current;
+
         // --- Render Main Viewport ---
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         starfield.draw(ctx, player.x, player.y, canvas.width, canvas.height);
@@ -374,10 +477,12 @@ export const App: React.FC = () => {
           shakeDurationRef.current--;
         }
 
-        ctx.translate(canvas.width / 2 - player.x + shakeX, canvas.height / 2 - player.y + shakeY);
+        ctx.translate(canvas.width / 2 + shakeX, canvas.height / 2 + shakeY);
+        ctx.scale(currentZoom, currentZoom);
+        ctx.translate(-player.x, -player.y);
 
         nebula.draw(ctx, showNebula);
-        drawSectorGrid(ctx, player.x, player.y, canvas.width, canvas.height, showGrid);
+        drawSectorGrid(ctx, player.x, player.y, canvas.width / currentZoom, canvas.height / currentZoom, showGrid);
 
         for (const ast of asteroids) ast.draw(ctx);
         for (const drone of drones) drone.draw(ctx);
@@ -508,6 +613,10 @@ export const App: React.FC = () => {
         audioEnabled={audioEnabled}
         onToggleAudio={handleToggleAudio}
         radarCanvasRef={radarCanvasRef}
+        zoomLevel={hudZoom}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onZoomReset={handleZoomReset}
         gameStarted={gameStarted}
         onStartGame={handleStartGame}
         gameOver={gameOver}

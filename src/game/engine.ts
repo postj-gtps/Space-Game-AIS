@@ -671,10 +671,11 @@ export function drawSectorGrid(
 ): void {
   if (!showGrid) return;
   const gridSize = 300;
-  const startX = Math.floor((camX - width / 2) / gridSize) * gridSize;
-  const endX = startX + width + gridSize * 2;
-  const startY = Math.floor((camY - height / 2) / gridSize) * gridSize;
-  const endY = startY + height + gridSize * 2;
+  const halfWorld = CONFIG.worldSize / 2;
+  const startX = Math.max(-halfWorld, Math.floor((camX - width / 2) / gridSize) * gridSize);
+  const endX = Math.min(halfWorld, Math.ceil((camX + width / 2) / gridSize) * gridSize);
+  const startY = Math.max(-halfWorld, Math.floor((camY - height / 2) / gridSize) * gridSize);
+  const endY = Math.min(halfWorld, Math.ceil((camY + height / 2) / gridSize) * gridSize);
 
   ctx.save();
   ctx.strokeStyle = 'rgba(0, 240, 255, 0.06)';
