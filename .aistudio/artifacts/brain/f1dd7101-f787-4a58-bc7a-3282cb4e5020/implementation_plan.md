@@ -1,61 +1,59 @@
-# Cartesian Coordinate Display Conversion for Classroom Math
+# Fix Asset Loading on GitHub Pages (Subpath Base URL Resolution)
 
-Align the game's in-flight telemetry and sector coordinate displays with standard mathematics Cartesian coordinate conventions ($\text{Right} = +X$, $\text{Left} = -X$, $\text{Up} = +Y$, $\text{Down} = -Y$).
+Resolve the missing ship and drone PNG images on GitHub Pages deployments by supporting Vite's subpath `base` configuration (`/Space-Game-AIS/`) and bundling fallback textures directly.
 
 ---
 
-## Technical Explanation: Computer Graphics vs. Cartesian Math
+## Root Cause Analysis
 
-### Why Screen Coordinates Differ from Math Projections
-1. **Cathode Ray Tube (CRT) Line Scanning**: Early display monitors drew electron beam scanlines from top-to-bottom and left-to-right. Consequently, computer operating systems, windowing engines, HTML5 Canvas 2D, and SVGs standardized on placing the origin `(0, 0)` at the **top-left corner** of the display.
-2. **The $Y$-Axis Inversion**:
-   - In **Standard Mathematics (Cartesian plane)**: As you move **up**, the $Y$-coordinate **increases** ($+Y$). As you move **down**, it **decreases** ($-Y$).
-   - In **Computer Graphics**: As you move **down**, the $Y$-coordinate **increases** ($+Y$). Moving **up** towards the top of the monitor reduces $Y$ into negative numbers.
-3. **The Flight Engine Calculation**:
-   - The starship spawns at the center of the sector `(0, 0)` facing upward (heading $000^\circ$ North).
-   - Moving forward (upward) lowers internal canvas $Y$ into negative values (`-player.y`).
-   - By converting the display readout to Math Cartesian space ($\text{Display } Y = -\text{Internal } Y / 100$ and $\text{Display } X = \text{Internal } X / 100$), the HUD immediately matches standard classroom graph paper: **Up is $+Y$**, **Down is $-Y$**, **Right is $+X$**, and **Left is $-X$**.
+1. **GitHub Pages Subpath vs Root Domain**:
+   - In AI Studio preview and local dev, the app runs at the root path (`/`).
+   - On GitHub Pages (`https://<username>.github.io/Space-Game-AIS/`), the app is served from a subfolder path: `/Space-Game-AIS/`.
+   - The user correctly configured `base: '/Space-Game-AIS/'` in `vite.config.ts`, which causes Vite to rewrite all HTML script and stylesheet tags to `/Space-Game-AIS/assets/...`.
+2. **Hardcoded Root Paths in Asset Pipeline**:
+   - In `src/game/assets.ts`, catalog data and image files were fetched using absolute paths with a leading slash:
+     `fetch('/assets/data/ships.json')`
+     `src: '/assets/images/ships/ship-starter.png'`
+     `src: '/assets/images/enemies/Enemy%20Drone.png'`
+   - In the browser on GitHub Pages, `/assets/...` resolves to `https://<username>.github.io/assets/...` (the root GitHub domain), completely skipping the `/Space-Game-AIS/` repository name and returning **HTTP 404 Not Found**.
+3. **Trigger of Retro Vector Fallback**:
+   - When texture loading fails (`img.naturalWidth === 0`), `PlayerShip.draw` executes its retro vector wireframe fallback: the exact cyan arrowhead polygon shown in the user's screenshot.
 
 ---
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> - **Display-Level Conversion**: Convert `telemetry.coordX` and `telemetry.coordY` directly in the HUD telemetry pipeline so students see standard math Cartesian coordinates without disrupting the internal physics loop, collision calculations, or camera transforms.
-> - **Consistent Game Over Telemetry**: The "Critical Hull Failure" respawn modal will also reflect the same Cartesian coordinates for the vessel's last recorded sector position.
-> - **Numeric Format**: Display clean integer coordinates `X: [val] | Y: [val]` as confirmed.
+> - **Dual-Layer Resolution (Zero 404 Guarantee)**:
+>   1. **Dynamic Base URL Helper (`resolveAssetPath`)**: Automatically prepends Vite's `import.meta.env.BASE_URL` (`/Space-Game-AIS/`) to all asset URLs at runtime.
+>   2. **Bundled Asset Imports**: Directly import `ship-starter.png` and `Enemy Drone.png` in TypeScript so Vite compiles them directly into `dist/assets/`, guaranteeing they are always available even if network JSON fetches encounter CORS or path discrepancies.
+>   3. **Automatic Fallback Chain**: If a remote or JSON-specified path fails to load, the engine falls back to the bundled image before resorting to the wireframe vector shape.
 
 ---
 
 ### 1. Overview & Core Concept
 
-- **Purpose**: Prevent cognitive confusion for students practicing Cartesian coordinate geometry by ensuring that piloting the spacecraft up, down, left, and right produces coordinate changes identical to graphing on an $(x, y)$ coordinate plane.
-- **Student Experience**:
-  - Fly East (Right) $\rightarrow X$ increments positively ($+1, +2, +3 \dots$).
-  - Fly West (Left) $\rightarrow X$ decrements negatively ($-1, -2, -3 \dots$).
-  - Fly North (Up) $\rightarrow Y$ increments positively ($+1, +2, +3 \dots$).
-  - Fly South (Down) $\rightarrow Y$ decrements negatively ($-1, -2, -3 \dots$).
+- **Problem**: Ship and drone textures fail to load on GitHub Pages because asset paths do not incorporate the repository subpath (`/Space-Game-AIS/`).
+- **Solution**: Dynamically resolve all asset paths against `import.meta.env.BASE_URL` and bundle fallback textures so images display seamlessly across GitHub Pages, AI Studio preview, and local development.
 
 ---
 
 ### 2. User Experience & Visual Design
 
-- **Top-Left HUD Panel**:
-  - `SECTOR COORD: X: 0 | Y: 0` at origin.
-  - Moving forward North displays positive $Y$ (e.g. `X: 0 | Y: 14`).
-  - Moving East displays positive $X$ (e.g. `X: 22 | Y: 14`).
-- **Game Over Modal**:
-  - `LAST COORDS: X: [Cartesian X] | Y: [Cartesian Y]`
+- **Ship Appearance**: The high-resolution **SF-77 Vanguard** sprite with hull armor and thrusters renders immediately on GitHub Pages instead of the cyan wireframe fallback.
+- **Combat Drones**: The **Unit-07 Combat Drone** sprite renders reliably across all deployment environments.
+- **Environment Agnostic**: Works identically whether hosted at `https://<username>.github.io/Space-Game-AIS/`, root custom domains (`https://example.com/`), or AI Studio dev containers.
 
 ---
 
 ### 3. Key Product Decisions & Trade-Offs
 
-- **Decision 1: Projection Inversion in Telemetry Output**
-  - *Chosen Approach*: Apply Cartesian mapping at the telemetry boundary ($\text{coordX} = \text{Math.round}(player.x / 100)$, $\text{coordY} = \text{Math.round}(-player.y / 100)$).
-  - *Why*: Decouples the mathematical classroom presentation from low-level canvas viewport matrix transformations, eliminating any risk of breaking asteroid collisions, camera smoothing, or radar sweeping.
-- **Decision 2: Rounding / Precision**
-  - *Chosen Approach*: Use `Math.round` instead of `Math.floor` so coordinates cleanly cross $0$ at the origin without asymmetric floor bias across negative numbers.
+- **Decision 1: Use `import.meta.env.BASE_URL` with Relative Fallback**
+  - *Chosen Approach*: `resolveAssetPath(path)` strips leading slashes and combines with `import.meta.env.BASE_URL`.
+  - *Why*: It honors `vite.config.ts`'s `base` setting in both build and dev modes without hardcoding repository names.
+- **Decision 2: Direct Asset Import in Fallback Catalog**
+  - *Chosen Approach*: `import defaultShipImg from ...` in `assets.ts`.
+  - *Why*: Guarantees that Vite's asset compiler processes the image into `dist/assets/`, ensuring zero broken images regardless of server static directory rules.
 
 ---
 
@@ -63,34 +61,36 @@ Align the game's in-flight telemetry and sector coordinate displays with standar
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│               Internal Game Engine Space               │
-│  - Canvas screen Y: negative is UP, positive is DOWN   │
-│  - Player physics: (player.x, player.y)                │
+│                   vite.config.ts                       │
+│  - base: '/Space-Game-AIS/'                            │
+│  - Exposes import.meta.env.BASE_URL                    │
 └───────────────────────────┬────────────────────────────┘
                             │
                             ▼
 ┌────────────────────────────────────────────────────────┐
-│             Cartesian Classroom Projection             │
-│  - coordX = Math.round( player.x / 100 )  (+X = Right) │
-│  - coordY = Math.round( -player.y / 100 ) (+Y = Up)    │
+│               src/game/assets.ts                       │
+│  - import defaultShipImg from '../assets/images/...'   │
+│  - import defaultDroneImg from '../assets/images/...'  │
+│  - resolveAssetPath(path): prepends BASE_URL           │
+│  - Automatic image load retry & fallback cascade       │
 └───────────────────────────┬────────────────────────────┘
                             │
                             ▼
 ┌────────────────────────────────────────────────────────┐
-│               Student-Facing HUD & Modals              │
-│  - Top-Left Telemetry: "SECTOR COORD: X: ... | Y: ..." │
-│  - Game Over Modal: "LAST COORDS: X: ... | Y: ..."     │
+│                 Vite Production Build                  │
+│  - dist/assets/ship-starter-[hash].png                 │
+│  - dist/assets/Enemy Drone-[hash].png                  │
+│  - Fully resolved paths on GitHub Pages deployment     │
 └────────────────────────────────────────────────────────┘
 ```
 
-### Files to Modify
+### Steps to Implement
 
-1. `src/App.tsx`:
-   - In the telemetry update loop:
-     `coordX: Math.round(player.x / 100)`
-     `coordY: Math.round(-player.y / 100)`
-   - In game over triggers and reset states:
-     Ensure the converted Cartesian coordinates are passed to the Game Over modal.
-2. Verification:
-   - Run `compile_applet` and `lint_applet`.
-   - Verify dev server on port 3000.
+1. **`src/game/assets.ts`**:
+   - Add `resolveAssetPath(path: string): string` utility.
+   - Import default ship and drone images via Vite ES module imports.
+   - Update `ships.json` fetch to use `resolveAssetPath('assets/data/ships.json')` with relative `./` and root `/` fallback cascade.
+   - Update `fallbackCatalog` and image preloader to use resolved URLs and bundled defaults.
+2. **Build & Verify**:
+   - Run `npm run build` to confirm assets compile into `dist/` with correct `/Space-Game-AIS/` prefixes.
+   - Verify with `compile_applet` and `lint_applet`.

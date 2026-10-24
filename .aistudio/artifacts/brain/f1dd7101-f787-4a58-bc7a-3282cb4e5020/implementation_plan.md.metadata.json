@@ -1,6 +1,6 @@
 {
-  "summary":  "Implementation plan to explain the computer graphics vs Cartesian coordinate inversion and convert the sector coordinate display to standard mathematics Cartesian convention (+X right, +Y up).",
-  "updatedAt":  "2026-10-23T23:43:16.328699352Z",
+  "summary":  "Implementation plan to fix ship and enemy drone PNG loading on GitHub Pages by resolving base URLs and bundling static assets.",
+  "updatedAt":  "2026-10-24T01:35:57.604546924Z",
   "requestFeedback":  true,
   "userFacing":  true
 }

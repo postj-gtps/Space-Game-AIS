@@ -1,4 +1,16 @@
 import { ShipsCatalog, ShipDefinition } from '../types/game';
+import defaultShipStarterImg from '../../assets/images/ships/ship-starter.png';
+import defaultEnemyDroneImg from '../../assets/images/enemies/Enemy Drone.png';
+
+export function resolveAssetPath(path: string): string {
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
+    return path;
+  }
+  const cleanPath = path.replace(/^\.?\//, '');
+  const baseUrl = import.meta.env.BASE_URL || './';
+  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+  return `${normalizedBase}${cleanPath}`;
+}
 
 export class AssetManager {
   public static shipsCatalog: ShipsCatalog = {};
@@ -13,7 +25,7 @@ export class AssetManager {
       description:
         'Standard issue heavy fighter equipped with dual wing-mounted plasma cannons and tri-jet sublight thrusters.',
       sprite: {
-        src: '/assets/images/ships/ship-starter.png',
+        src: defaultShipStarterImg,
         scale: 0.11,
         rotationOffset: 180,
       },
@@ -46,32 +58,60 @@ export class AssetManager {
   };
 
   public static async init(): Promise<void> {
-    try {
-      const res = await fetch('/assets/data/ships.json');
-      if (!res.ok) throw new Error('HTTP status ' + res.status);
-      this.shipsCatalog = await res.json();
-    } catch (e) {
-      console.warn('Could not fetch /assets/data/ships.json. Using fallback catalog.', e);
+    const candidates = [
+      resolveAssetPath('assets/data/ships.json'),
+      './assets/data/ships.json',
+      '/assets/data/ships.json',
+    ];
+
+    let jsonLoaded = false;
+    for (const candidate of candidates) {
+      try {
+        const res = await fetch(candidate);
+        if (res.ok) {
+          this.shipsCatalog = await res.json();
+          jsonLoaded = true;
+          break;
+        }
+      } catch {
+        // Continue to fallback candidates
+      }
+    }
+
+    if (!jsonLoaded) {
+      console.warn('Could not fetch ships.json over network. Utilizing embedded fallback catalog.');
       this.shipsCatalog = this.fallbackCatalog;
     }
 
     const loadPromises: Promise<void>[] = [];
+
+    // Preload ship sprites
     for (const key in this.shipsCatalog) {
       const ship = this.shipsCatalog[key];
       if (ship.sprite && ship.sprite.src) {
         const img = new Image();
-        let src = ship.sprite.src;
-        if (!src.startsWith('/') && !src.startsWith('http')) {
-          src = '/' + src;
-        }
-        img.src = src;
+        const primarySrc = resolveAssetPath(ship.sprite.src);
+        img.src = primarySrc;
         this.loadedImages[key] = img;
+
         loadPromises.push(
           new Promise((resolve) => {
             img.onload = () => resolve();
             img.onerror = () => {
-              console.warn(`Failed to load texture for ${key} from ${src}`);
-              resolve();
+              console.warn(`Primary texture failed for ${key} at ${primarySrc}. Attempting fallbacks.`);
+              if (key === 'starter_ship') {
+                img.src = defaultShipStarterImg;
+                img.onload = () => resolve();
+                img.onerror = () => {
+                  img.src = './assets/images/ships/ship-starter.png';
+                  img.onload = () => resolve();
+                  img.onerror = () => resolve();
+                };
+              } else {
+                img.src = './' + ship.sprite.src.replace(/^\.?\//, '');
+                img.onload = () => resolve();
+                img.onerror = () => resolve();
+              }
             };
           })
         );
@@ -80,18 +120,25 @@ export class AssetManager {
 
     // Preload Enemy Drone sprite
     const droneImg = new Image();
-    droneImg.src = '/assets/images/enemies/Enemy%20Drone.png';
+    const primaryDroneSrc = resolveAssetPath('assets/images/enemies/Enemy Drone.png');
+    droneImg.src = primaryDroneSrc;
     this.droneImage = droneImg;
+
     loadPromises.push(
       new Promise((resolve) => {
         droneImg.onload = () => resolve();
         droneImg.onerror = () => {
-          // Fallback to unencoded or ships directory if needed
-          droneImg.src = '/assets/images/ships/Enemy%20Drone.png';
+          console.warn(`Primary drone texture failed at ${primaryDroneSrc}. Attempting bundled fallback.`);
+          droneImg.src = defaultEnemyDroneImg;
           droneImg.onload = () => resolve();
           droneImg.onerror = () => {
-            console.warn('Failed to load Enemy Drone sprite');
-            resolve();
+            droneImg.src = './assets/images/enemies/Enemy%20Drone.png';
+            droneImg.onload = () => resolve();
+            droneImg.onerror = () => {
+              droneImg.src = './assets/images/ships/Enemy%20Drone.png';
+              droneImg.onload = () => resolve();
+              droneImg.onerror = () => resolve();
+            };
           };
         };
       })
