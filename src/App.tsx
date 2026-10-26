@@ -572,6 +572,10 @@ export const App: React.FC = () => {
         const cartesianX = Math.round(player.x / 100) || 0;
         const cartesianY = Math.round(-player.y / 100) || 0;
 
+        const overheatRemainingSec = player.isOverheated
+          ? Math.max(0, Math.ceil((player.overheatEndTime - Date.now()) / 100) / 10)
+          : 0;
+
         setTelemetry((prev) => ({
           shipName: cfg.name,
           fps: frameCount % 30 === 0 && deltaTime > 0 ? Math.round(1 / deltaTime) : prev.fps,
@@ -583,6 +587,8 @@ export const App: React.FC = () => {
           heatPct,
           shieldPct,
           isDead: player.isDead,
+          isOverheated: player.isOverheated,
+          overheatRemainingSec,
         }));
 
         animId = requestAnimationFrame(loop);

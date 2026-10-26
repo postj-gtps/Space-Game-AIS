@@ -112,18 +112,47 @@ export const HUD: React.FC<HUDProps> = ({
         </div>
 
         {/* WEAPON / ENERGY GAUGES */}
-        <div className="hud-panel p-3 rounded-lg text-xs flex flex-col gap-2">
+        <div className={`hud-panel p-3 rounded-lg text-xs flex flex-col gap-2 transition-all ${telemetry.isOverheated ? 'border-red-500/80 shadow-[0_0_15px_rgba(255,50,0,0.35)]' : ''}`}>
           <div>
-            <div className="flex justify-between mb-1">
-              <span className="text-slate-400 text-[10px]">PLASMA CANNON HEAT</span>
-              <span className="text-[10px] text-cyan-300 font-bold">{telemetry.heatPct}%</span>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-slate-400 text-[10px] flex items-center gap-1.5 font-bold">
+                PLASMA CANNON HEAT
+                {telemetry.isOverheated && (
+                  <span className="animate-pulse text-[9px] font-bold text-red-300 bg-red-950/90 px-1.5 py-0.2 rounded border border-red-500/70 tracking-wider">
+                    LOCKOUT
+                  </span>
+                )}
+              </span>
+              <span
+                className={`text-[10px] font-bold ${
+                  telemetry.isOverheated
+                    ? 'text-red-400 font-mono animate-pulse'
+                    : telemetry.heatPct > 80
+                    ? 'text-red-400'
+                    : telemetry.heatPct > 50
+                    ? 'text-amber-400'
+                    : 'text-cyan-300'
+                }`}
+              >
+                {telemetry.isOverheated ? `100% [${(telemetry.overheatRemainingSec ?? 3.0).toFixed(1)}s]` : `${telemetry.heatPct}%`}
+              </span>
             </div>
-            <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden border border-cyan-500/30">
+            <div className={`w-full h-2 bg-slate-900 rounded-full overflow-hidden border ${telemetry.isOverheated ? 'border-red-500/60 ring-1 ring-red-500/40' : 'border-cyan-500/30'}`}>
               <div
-                className={`h-full transition-all duration-75 ${heatColorClass}`}
+                className={`h-full transition-all duration-75 ${
+                  telemetry.isOverheated
+                    ? 'bg-gradient-to-r from-red-600 via-amber-500 to-red-500 animate-pulse'
+                    : heatColorClass
+                }`}
                 style={{ width: `${telemetry.heatPct}%` }}
               />
             </div>
+            {telemetry.isOverheated && (
+              <div className="text-[9px] text-red-400/90 font-mono mt-1 flex justify-between items-center animate-pulse">
+                <span>SYSTEM LOCKOUT: VENTING COOLANT</span>
+                <span className="font-bold">{(telemetry.overheatRemainingSec ?? 3.0).toFixed(1)}s</span>
+              </div>
+            )}
           </div>
           <div>
             <div className="flex justify-between mb-1">
@@ -279,12 +308,29 @@ export const HUD: React.FC<HUDProps> = ({
         <div className="pointer-events-auto pb-2">
           <button
             {...bindTouch('Space')}
-            className="touch-btn w-20 h-20 bg-red-950/80 border-2 border-red-500/80 rounded-full flex items-center justify-center text-red-300 font-bold active:bg-red-600 text-sm glow-red cursor-pointer"
+            className={`touch-btn w-20 h-20 rounded-full flex flex-col items-center justify-center font-bold text-sm cursor-pointer transition-all ${
+              telemetry.isOverheated
+                ? 'bg-red-950/40 border-2 border-red-500/50 text-red-400'
+                : 'bg-red-950/80 border-2 border-red-500/80 text-red-300 active:bg-red-600 glow-red'
+            }`}
           >
-            FIRE
+            <span>{telemetry.isOverheated ? 'LOCKED' : 'FIRE'}</span>
+            {telemetry.isOverheated && (
+              <span className="text-[10px] font-mono">{(telemetry.overheatRemainingSec ?? 3.0).toFixed(1)}s</span>
+            )}
           </button>
         </div>
       </div>
+
+      {/* CENTER OVERHEAT LOCKOUT BANNER */}
+      {telemetry.isOverheated && !telemetry.isDead && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 pointer-events-none z-20 select-none">
+          <div className="px-4 py-1.5 rounded-full bg-red-950/90 border border-red-500/90 shadow-[0_0_20px_rgba(255,40,0,0.6)] flex items-center gap-2.5 text-xs font-mono font-bold tracking-widest text-red-200 animate-pulse">
+            <span className="inline-block w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_#ff0000]" />
+            <span>WEAPONS OVERHEATED: SYSTEM LOCKOUT ({(telemetry.overheatRemainingSec ?? 3.0).toFixed(1)}s)</span>
+          </div>
+        </div>
+      )}
 
       {/* START PROMPT */}
       {!gameStarted && (

@@ -49,4 +49,6 @@ export interface TelemetryData {
   heatPct: number;
   shieldPct: number;
   isDead: boolean;
+  isOverheated?: boolean;
+  overheatRemainingSec?: number;
 }

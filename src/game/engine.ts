@@ -28,6 +28,8 @@ export class ParticleSystem {
     life: number;
     decay: number;
     size: number;
+    growth?: number;
+    isSmoke?: boolean;
   }> = [];
 
   public emitThrust(x: number, y: number, vx: number, vy: number, color: string): void {
@@ -73,12 +75,39 @@ export class ParticleSystem {
     }
   }
 
+  public emitSmoke(
+    x: number,
+    y: number,
+    vx: number,
+    vy: number,
+    color = 'rgba(210, 220, 230, 0.6)',
+    size = 4,
+    decay = 0.025,
+    growth = 0.25
+  ): void {
+    this.particles.push({
+      x,
+      y,
+      vx,
+      vy,
+      color,
+      life: 1.0,
+      decay,
+      size,
+      growth,
+      isSmoke: true,
+    });
+  }
+
   public update(): void {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.x += p.vx;
       p.y += p.vy;
       p.life -= p.decay;
+      if (p.growth) {
+        p.size += p.growth;
+      }
       if (p.life <= 0) this.particles.splice(i, 1);
     }
   }
@@ -86,13 +115,21 @@ export class ParticleSystem {
   public draw(ctx: CanvasRenderingContext2D): void {
     for (const p of this.particles) {
       ctx.save();
-      ctx.globalAlpha = Math.max(0, p.life);
-      ctx.fillStyle = p.color;
-      ctx.shadowColor = p.color;
-      ctx.shadowBlur = 6;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fill();
+      if (p.isSmoke) {
+        ctx.globalAlpha = Math.max(0, p.life * 0.45);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.restore();
     }
   }
@@ -301,6 +338,11 @@ export class PlayerShip {
 
   public lastShotTime = 0;
   public laserHeat = 0;
+  public isOverheated = false;
+  public overheatEndTime = 0;
+  public lastOverheatClickSound = 0;
+  public smokeFrameCount = 0;
+
   public maxShields = 100;
   public shields = 100;
   public lastDamageTime = 0;
@@ -326,8 +368,47 @@ export class PlayerShip {
     this.angle = -Math.PI / 2;
     this.shields = this.config.stats.maxShields;
     this.laserHeat = 0;
+    this.isOverheated = false;
+    this.overheatEndTime = 0;
     this.isDead = false;
     this.invulnerableTimer = 60;
+  }
+
+  public triggerOverheat(soundEngine: SoundEngine, particleSystem: ParticleSystem): void {
+    if (this.isOverheated) return;
+    this.isOverheated = true;
+    this.overheatEndTime = Date.now() + 3000;
+    this.laserHeat = 100;
+
+    soundEngine.playOverheat();
+
+    const cfg = this.config;
+    const muzzles = cfg.anchors && cfg.anchors.muzzles ? cfg.anchors.muzzles : [{ x: 25, y: 0 }];
+    for (const m of muzzles) {
+      const muzzlePos = this.getLocalAnchorWorldPos(m.x, m.y);
+      for (let i = 0; i < 8; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const spd = 0.5 + Math.random() * 2.5;
+        particleSystem.emitSmoke(
+          muzzlePos.x,
+          muzzlePos.y,
+          this.vx * 0.3 + Math.cos(angle) * spd,
+          this.vy * 0.3 + Math.sin(angle) * spd,
+          'rgba(235, 245, 255, 0.75)',
+          5 + Math.random() * 4,
+          0.025,
+          0.3
+        );
+        particleSystem.emitSpark(
+          muzzlePos.x,
+          muzzlePos.y,
+          this.vx * 0.4 + (Math.random() - 0.5) * 3,
+          this.vy * 0.4 + (Math.random() - 0.5) * 3,
+          '#ffaa00',
+          18
+        );
+      }
+    }
   }
 
   public takeDamage(
@@ -490,19 +571,94 @@ export class PlayerShip {
     if (this.y > halfWorld) this.y = -halfWorld;
     if (this.y < -halfWorld) this.y = halfWorld;
 
-    if (keys.fire) this.shoot(soundEngine, particleSystem, projectiles);
+    const now = Date.now();
 
-    this.laserHeat = Math.max(0, this.laserHeat - 0.4);
+    if (this.isOverheated) {
+      const remaining = this.overheatEndTime - now;
+      if (remaining <= 0) {
+        // 3 seconds elapsed: Lockout lifted, heat reset to 0%
+        this.isOverheated = false;
+        this.laserHeat = 0;
+        this.overheatEndTime = 0;
+        soundEngine.playOverheatCooldownComplete();
+
+        // Final thermal venting burst
+        const muzzles = cfg.anchors && cfg.anchors.muzzles ? cfg.anchors.muzzles : [{ x: 25, y: 0 }];
+        for (const m of muzzles) {
+          const muzzlePos = this.getLocalAnchorWorldPos(m.x, m.y);
+          for (let i = 0; i < 5; i++) {
+            particleSystem.emitSmoke(
+              muzzlePos.x,
+              muzzlePos.y,
+              this.vx * 0.3 + (Math.random() - 0.5) * 2,
+              this.vy * 0.3 + (Math.random() - 0.5) * 2,
+              'rgba(210, 230, 255, 0.5)',
+              4,
+              0.04,
+              0.25
+            );
+          }
+        }
+      } else {
+        // Actively overheated: guns smoke!
+        this.smokeFrameCount++;
+        if (this.smokeFrameCount % 2 === 0) {
+          const muzzles = cfg.anchors && cfg.anchors.muzzles ? cfg.anchors.muzzles : [{ x: 25, y: 0 }];
+          const dirX = Math.cos(this.angle);
+          const dirY = Math.sin(this.angle);
+
+          for (const m of muzzles) {
+            const muzzlePos = this.getLocalAnchorWorldPos(m.x, m.y);
+            particleSystem.emitSmoke(
+              muzzlePos.x + (Math.random() - 0.5) * 3,
+              muzzlePos.y + (Math.random() - 0.5) * 3,
+              this.vx * 0.2 - dirX * (0.8 + Math.random() * 0.8) + (Math.random() - 0.5) * 0.8,
+              this.vy * 0.2 - dirY * (0.8 + Math.random() * 0.8) + (Math.random() - 0.5) * 0.8,
+              Math.random() > 0.4 ? 'rgba(230, 240, 250, 0.65)' : 'rgba(130, 140, 155, 0.5)',
+              4 + Math.random() * 3,
+              0.02 + Math.random() * 0.015,
+              0.22
+            );
+
+            if (Math.random() < 0.25) {
+              particleSystem.emitSpark(
+                muzzlePos.x,
+                muzzlePos.y,
+                this.vx * 0.2 + (Math.random() - 0.5) * 2,
+                this.vy * 0.2 + (Math.random() - 0.5) * 2,
+                Math.random() > 0.5 ? '#ff5500' : '#ffcc00',
+                15
+              );
+            }
+          }
+        }
+
+        // Auditory feedback when trying to fire while locked out
+        if (keys.fire && now - this.lastOverheatClickSound > 200) {
+          this.lastOverheatClickSound = now;
+          soundEngine.playOverheatClick();
+        }
+      }
+    } else {
+      // Normal heat dissipation
+      this.laserHeat = Math.max(0, this.laserHeat - 0.4);
+
+      if (keys.fire) {
+        this.shoot(soundEngine, particleSystem, projectiles);
+      }
+    }
   }
 
   public shoot(soundEngine: SoundEngine, particleSystem: ParticleSystem, projectiles: LaserProjectile[]): void {
+    if (this.isOverheated) return;
+
     const now = Date.now();
     const cfg = this.config;
     const stats = cfg.stats;
 
-    if (now - this.lastShotTime >= stats.laserCooldown && this.laserHeat < stats.laserHeatLimit) {
+    if (now - this.lastShotTime >= stats.laserCooldown) {
       this.lastShotTime = now;
-      this.laserHeat = Math.min(100, this.laserHeat + 10);
+      this.laserHeat = Math.min(100, this.laserHeat + 11);
 
       const dirX = Math.cos(this.angle);
       const dirY = Math.sin(this.angle);
@@ -532,6 +688,11 @@ export class PlayerShip {
       this.vy -= dirY * 0.075;
 
       soundEngine.playLaser();
+
+      if (this.laserHeat >= 100) {
+        this.laserHeat = 100;
+        this.triggerOverheat(soundEngine, particleSystem);
+      }
     }
   }
 
@@ -575,6 +736,49 @@ export class PlayerShip {
       ctx.strokeStyle = '#00f0ff';
       ctx.lineWidth = 2;
       ctx.stroke();
+    }
+
+    // Glowing Overheated Gun Barrels & Muzzles
+    const muzzles = cfg.anchors && cfg.anchors.muzzles ? cfg.anchors.muzzles : [{ x: 25, y: 0 }];
+    const isOverheated = this.isOverheated;
+    const heatRatio = this.laserHeat / 100;
+
+    if (isOverheated || heatRatio > 0.45) {
+      ctx.save();
+      for (const m of muzzles) {
+        const pulse = Math.sin(Date.now() * 0.015) * 0.15 + 0.85;
+        const glowRadius = isOverheated ? 18 * pulse : 11 * heatRatio * pulse;
+        const alpha = isOverheated ? 0.95 : (heatRatio - 0.45) * 1.8;
+
+        // Glowing barrel line
+        ctx.beginPath();
+        ctx.moveTo(m.x - 16, m.y);
+        ctx.lineTo(m.x + 2, m.y);
+        ctx.strokeStyle = isOverheated ? `rgba(255, 90, 20, ${alpha})` : `rgba(255, 90, 0, ${alpha * 0.6})`;
+        ctx.lineWidth = isOverheated ? 3.5 : 2;
+        ctx.shadowColor = isOverheated ? '#ff3300' : '#ff6600';
+        ctx.shadowBlur = isOverheated ? 18 : 8;
+        ctx.stroke();
+
+        // Hot incandescent muzzle corona
+        const grad = ctx.createRadialGradient(m.x, m.y, 1, m.x, m.y, Math.max(2, glowRadius));
+        if (isOverheated) {
+          grad.addColorStop(0, `rgba(255, 255, 230, ${alpha})`);
+          grad.addColorStop(0.3, `rgba(255, 170, 20, ${alpha * 0.9})`);
+          grad.addColorStop(0.7, `rgba(255, 40, 0, ${alpha * 0.6})`);
+          grad.addColorStop(1, 'rgba(255, 0, 0, 0)');
+        } else {
+          grad.addColorStop(0, `rgba(255, 180, 40, ${alpha * 0.8})`);
+          grad.addColorStop(0.6, `rgba(255, 60, 0, ${alpha * 0.4})`);
+          grad.addColorStop(1, 'rgba(255, 0, 0, 0)');
+        }
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, glowRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
     }
 
     // Glowing Outer Shield Shell

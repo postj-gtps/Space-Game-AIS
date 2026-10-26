@@ -36,7 +36,7 @@ export class AssetManager {
         rotationSpeed: 0.0325,
         maxShields: 100,
         laserCooldown: 110,
-        laserHeatLimit: 95,
+        laserHeatLimit: 100,
         collisionRadius: 44,
       },
       anchors: {
