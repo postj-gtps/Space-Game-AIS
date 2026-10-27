@@ -8,6 +8,7 @@ import {
   LaserProjectile,
   Asteroid,
   TargetDrone,
+  HostileDrone,
   ParticleSystem,
   Starfield,
   NebulaRenderer,
@@ -48,6 +49,7 @@ export const App: React.FC = () => {
   const projectilesRef = useRef<LaserProjectile[]>([]);
   const asteroidsRef = useRef<Asteroid[]>([]);
   const dronesRef = useRef<TargetDrone[]>([]);
+  const hostileDronesRef = useRef<HostileDrone[]>([]);
   const keysRef = useRef<InputState>({
     forward: false,
     reverse: false,
@@ -215,6 +217,14 @@ export const App: React.FC = () => {
       droneList.push(new TargetDrone(Math.cos(angle) * dist, Math.sin(angle) * dist));
     }
     dronesRef.current = droneList;
+
+    const hostileList: HostileDrone[] = [];
+    for (let i = 0; i < (CONFIG.maxHostileDrones || 6); i++) {
+      const dist = 600 + Math.random() * 2200;
+      const angle = Math.random() * Math.PI * 2;
+      hostileList.push(new HostileDrone(Math.cos(angle) * dist, Math.sin(angle) * dist));
+    }
+    hostileDronesRef.current = hostileList;
   }, []);
 
   // Window resize & keyboard listeners
@@ -335,6 +345,7 @@ export const App: React.FC = () => {
         const projectiles = projectilesRef.current;
         const asteroids = asteroidsRef.current;
         const drones = dronesRef.current;
+        const hostileDrones = hostileDronesRef.current;
         const starfield = starfieldRef.current;
         const nebula = nebulaRef.current;
         const keys = keysRef.current;
@@ -349,9 +360,10 @@ export const App: React.FC = () => {
           }
         }
 
-        // Environment & Drones update
+        // Environment, Target Drones & Hostile Combat Drones update
         for (const ast of asteroids) ast.update();
         for (const drone of drones) drone.update(player);
+        for (const hd of hostileDrones) hd.update(player, soundEngine, particleSystem, projectiles);
         particleSystem.update();
 
         // Check Collisions
@@ -380,7 +392,7 @@ export const App: React.FC = () => {
             }
           }
 
-          // Player vs Drone
+          // Player vs Target Drone
           for (const drone of drones) {
             const dist = Math.hypot(player.x - drone.x, player.y - drone.y);
             if (dist < radius + drone.radius) {
@@ -398,6 +410,52 @@ export const App: React.FC = () => {
               const bounceAngle = Math.atan2(drone.y - player.y, drone.x - player.x);
               drone.vx += Math.cos(bounceAngle) * 4;
               drone.vy += Math.sin(bounceAngle) * 4;
+            }
+          }
+
+          // Player vs Hostile Drone
+          for (const hd of hostileDrones) {
+            const dist = Math.hypot(player.x - hd.x, player.y - hd.y);
+            if (dist < radius + hd.radius) {
+              player.takeDamage(
+                30,
+                hd.x,
+                hd.y,
+                7,
+                soundEngine,
+                particleSystem,
+                triggerScreenShake,
+                () => setGameOver(true)
+              );
+
+              const bounceAngle = Math.atan2(hd.y - player.y, hd.x - player.x);
+              hd.vx += Math.cos(bounceAngle) * 4;
+              hd.vy += Math.sin(bounceAngle) * 4;
+            }
+          }
+        }
+
+        // Hostile Projectiles vs Player
+        if (!player.isDead) {
+          const pRadius = player.config.stats.collisionRadius || 20;
+          for (let pIdx = projectiles.length - 1; pIdx >= 0; pIdx--) {
+            const proj = projectiles[pIdx];
+            if (!proj.isEnemy) continue;
+
+            const dist = Math.hypot(player.x - proj.x, player.y - proj.y);
+            if (dist < pRadius + proj.radius) {
+              player.takeDamage(
+                15,
+                proj.x,
+                proj.y,
+                4,
+                soundEngine,
+                particleSystem,
+                triggerScreenShake,
+                () => setGameOver(true)
+              );
+              particleSystem.emitExplosion(proj.x, proj.y, 12, '#00ffff');
+              projectiles.splice(pIdx, 1);
             }
           }
         }
@@ -428,9 +486,10 @@ export const App: React.FC = () => {
           }
         }
 
-        // Projectiles vs Drones
+        // Player Projectiles vs Target Drones
         for (let pIdx = projectiles.length - 1; pIdx >= 0; pIdx--) {
           const proj = projectiles[pIdx];
+          if (proj.isEnemy) continue;
 
           for (let dIdx = drones.length - 1; dIdx >= 0; dIdx--) {
             const drone = drones[dIdx];
@@ -452,6 +511,41 @@ export const App: React.FC = () => {
                     new TargetDrone(player.x + Math.cos(angle) * 1200, player.y + Math.sin(angle) * 1200)
                   );
                 }, 4000);
+              } else {
+                soundEngine.playHitSound();
+              }
+              break;
+            }
+          }
+        }
+
+        // Player Projectiles vs Hostile Drones
+        for (let pIdx = projectiles.length - 1; pIdx >= 0; pIdx--) {
+          const proj = projectiles[pIdx];
+          if (proj.isEnemy) continue;
+
+          for (let hdIdx = hostileDrones.length - 1; hdIdx >= 0; hdIdx--) {
+            const hd = hostileDrones[hdIdx];
+            const dist = Math.hypot(proj.x - hd.x, proj.y - hd.y);
+
+            if (dist < hd.radius + proj.radius) {
+              hd.hp--;
+              particleSystem.emitExplosion(proj.x, proj.y, 15, '#ff3366');
+              projectiles.splice(pIdx, 1);
+
+              if (hd.hp <= 0) {
+                soundEngine.playExplosion(true);
+                particleSystem.emitExplosion(hd.x, hd.y, 45, '#ff4400');
+                particleSystem.emitExplosion(hd.x, hd.y, 25, '#ffcc00');
+                hostileDrones.splice(hdIdx, 1);
+
+                setTimeout(() => {
+                  const angle = Math.random() * Math.PI * 2;
+                  const spawnDist = 900 + Math.random() * 1600;
+                  hostileDrones.push(
+                    new HostileDrone(player.x + Math.cos(angle) * spawnDist, player.y + Math.sin(angle) * spawnDist)
+                  );
+                }, 5000);
               } else {
                 soundEngine.playHitSound();
               }
@@ -486,6 +580,7 @@ export const App: React.FC = () => {
 
         for (const ast of asteroids) ast.draw(ctx);
         for (const drone of drones) drone.draw(ctx);
+        for (const hd of hostileDrones) hd.draw(ctx);
         for (const proj of projectiles) proj.draw(ctx);
         particleSystem.draw(ctx);
         player.draw(ctx);
@@ -536,6 +631,27 @@ export const App: React.FC = () => {
                 radarCtx.beginPath();
                 radarCtx.arc(rx, ry, 2.5, 0, Math.PI * 2);
                 radarCtx.fill();
+              }
+            }
+
+            // Hostile Drones on Radar (Distinct Diamond Blip)
+            radarCtx.fillStyle = '#ff1144';
+            radarCtx.strokeStyle = '#ffffff';
+            radarCtx.lineWidth = 1;
+            for (const hd of hostileDrones) {
+              const dx = hd.x - player.x;
+              const dy = hd.y - player.y;
+              if (Math.hypot(dx, dy) < range) {
+                const rx = center + (dx / range) * center;
+                const ry = center + (dy / range) * center;
+                radarCtx.beginPath();
+                radarCtx.moveTo(rx, ry - 3.5);
+                radarCtx.lineTo(rx + 3.5, ry);
+                radarCtx.lineTo(rx, ry + 3.5);
+                radarCtx.lineTo(rx - 3.5, ry);
+                radarCtx.closePath();
+                radarCtx.fill();
+                radarCtx.stroke();
               }
             }
 
