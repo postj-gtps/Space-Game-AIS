@@ -8,6 +8,7 @@ export const CONFIG = {
   laserSpeed: 20,
   maxAsteroids: 45,
   maxDrones: 8,
+  maxHostileDrones: 6,
 };
 
 export interface InputState {
@@ -144,13 +145,15 @@ export class LaserProjectile {
   public life = 0;
   public maxLife = 55;
   public radius = 3;
+  public isEnemy = false;
 
-  constructor(x: number, y: number, vx: number, vy: number, angle: number) {
+  constructor(x: number, y: number, vx: number, vy: number, angle: number, isEnemy = false) {
     this.x = x;
     this.y = y;
     this.vx = vx;
     this.vy = vy;
     this.angle = angle;
+    this.isEnemy = isEnemy;
   }
 
   public update(particleSystem: ParticleSystem): void {
@@ -164,7 +167,7 @@ export class LaserProjectile {
         this.y,
         (Math.random() - 0.5) * 0.5,
         (Math.random() - 0.5) * 0.5,
-        '#00f0ff',
+        this.isEnemy ? '#ff3366' : '#00f0ff',
         10
       );
     }
@@ -180,7 +183,7 @@ export class LaserProjectile {
     ctx.lineTo(10, 0);
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 3;
-    ctx.shadowColor = '#00f0ff';
+    ctx.shadowColor = this.isEnemy ? '#ff3366' : '#00f0ff';
     ctx.shadowBlur = 12;
     ctx.stroke();
 
@@ -322,6 +325,266 @@ export class TargetDrone {
       ctx.lineTo(0, this.radius + 4);
       ctx.strokeStyle = 'rgba(255, 51, 102, 0.5)';
       ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+}
+
+export interface CornerCannon {
+  localX: number;
+  localY: number;
+  baseAngle: number;
+  lastFireTime: number;
+  cooldown: number;
+}
+
+export class HostileDrone {
+  public x: number;
+  public y: number;
+  public vx = 0;
+  public vy = 0;
+  public radius = 26;
+  public angle = 0;
+  public hp = 3;
+  public maxHp = 3;
+
+  // Circular patrol parameters
+  public centerX: number;
+  public centerY: number;
+  public circleRadius: number;
+  public direction: 1 | -1; // 1 = clockwise (turning right), -1 = counter-clockwise (turning left)
+  public speed = 2.4;
+  public orbitAngle: number;
+  public distanceTraveledInCircle = 0;
+  public targetCircumference: number;
+
+  // 4 Corner Plasma Cannons
+  public cannons: CornerCannon[];
+
+  constructor(startX: number, startY: number) {
+    this.x = startX;
+    this.y = startY;
+
+    // Start with a randomized circle diameter (300px to 800px, radius 150 to 400)
+    const initialDiameter = 300 + Math.random() * 500;
+    this.circleRadius = initialDiameter / 2;
+    this.direction = Math.random() < 0.5 ? 1 : -1;
+
+    // Place circle center so start position is the 12 o'clock position (top: y = centerY - circleRadius)
+    this.centerX = startX;
+    this.centerY = startY + this.circleRadius;
+    this.orbitAngle = -Math.PI / 2;
+    this.distanceTraveledInCircle = 0;
+    this.targetCircumference = 2 * Math.PI * this.circleRadius;
+
+    // Initial velocity at 12 o'clock:
+    // If direction = 1 (CW): heading right (+x)
+    // If direction = -1 (CCW): heading left (-x)
+    this.vx = this.direction * this.speed;
+    this.vy = 0;
+    this.angle = Math.atan2(this.vy, this.vx);
+
+    // Setup 4 Corner Cannons
+    const offset = 22;
+    this.cannons = [
+      { localX: offset, localY: -offset, baseAngle: -Math.PI / 4, lastFireTime: 0, cooldown: 650 + Math.random() * 200 },
+      { localX: offset, localY: offset, baseAngle: Math.PI / 4, lastFireTime: 0, cooldown: 650 + Math.random() * 200 },
+      { localX: -offset, localY: offset, baseAngle: (3 * Math.PI) / 4, lastFireTime: 0, cooldown: 650 + Math.random() * 200 },
+      { localX: -offset, localY: -offset, baseAngle: (-3 * Math.PI) / 4, lastFireTime: 0, cooldown: 650 + Math.random() * 200 },
+    ];
+  }
+
+  public update(
+    player: PlayerShip,
+    soundEngine: SoundEngine,
+    particleSystem: ParticleSystem,
+    projectiles: LaserProjectile[]
+  ): void {
+    // 1. Advance circular orbital motion
+    const angularSpeed = (this.speed / this.circleRadius) * this.direction;
+    this.orbitAngle += angularSpeed;
+    this.distanceTraveledInCircle += this.speed;
+
+    // Update position on current circle
+    this.x = this.centerX + Math.cos(this.orbitAngle) * this.circleRadius;
+    this.y = this.centerY + Math.sin(this.orbitAngle) * this.circleRadius;
+
+    // Instantaneous velocity (tangent to circle)
+    this.vx = -Math.sin(this.orbitAngle) * this.speed * this.direction;
+    this.vy = Math.cos(this.orbitAngle) * this.speed * this.direction;
+
+    // Align drone orientation with flight direction
+    this.angle = Math.atan2(this.vy, this.vx);
+
+    // Thruster sparks from the rear corners
+    if (Math.random() < 0.25) {
+      particleSystem.emitSpark(
+        this.x - Math.cos(this.angle) * 18,
+        this.y - Math.sin(this.angle) * 18,
+        -this.vx * 0.2 + (Math.random() - 0.5),
+        -this.vy * 0.2 + (Math.random() - 0.5),
+        '#ffaa00',
+        10
+      );
+    }
+
+    // 2. 12 O'Clock Re-routing: Each time the drone gets to the 12 o'clock position of the circle,
+    // it decides randomly to turn left or turn right for the next circle with a new random diameter.
+    if (this.distanceTraveledInCircle >= this.targetCircumference) {
+      this.distanceTraveledInCircle = 0;
+
+      const nextDiameter = 300 + Math.random() * 500;
+      const nextRadius = nextDiameter / 2;
+      const turnRight = Math.random() < 0.5;
+      const headingRight = this.vx >= 0;
+
+      if (headingRight) {
+        if (turnRight) {
+          // Turning right while heading right: new circle below (CW)
+          this.centerX = this.x;
+          this.centerY = this.y + nextRadius;
+          this.circleRadius = nextRadius;
+          this.direction = 1;
+          this.orbitAngle = -Math.PI / 2;
+          this.targetCircumference = 2 * Math.PI * nextRadius;
+        } else {
+          // Turning left while heading right: new circle above (CCW)
+          this.centerX = this.x;
+          this.centerY = this.y - nextRadius;
+          this.circleRadius = nextRadius;
+          this.direction = -1;
+          this.orbitAngle = Math.PI / 2;
+          this.targetCircumference = Math.PI * nextRadius;
+        }
+      } else {
+        if (turnRight) {
+          // Turning right while heading left: new circle above (CW)
+          this.centerX = this.x;
+          this.centerY = this.y - nextRadius;
+          this.circleRadius = nextRadius;
+          this.direction = 1;
+          this.orbitAngle = Math.PI / 2;
+          this.targetCircumference = Math.PI * nextRadius;
+        } else {
+          // Turning left while heading left: new circle below (CCW)
+          this.centerX = this.x;
+          this.centerY = this.y + nextRadius;
+          this.circleRadius = nextRadius;
+          this.direction = -1;
+          this.orbitAngle = -Math.PI / 2;
+          this.targetCircumference = 2 * Math.PI * nextRadius;
+        }
+      }
+    }
+
+    // Prevent wandering outside world boundaries
+    const halfWorld = CONFIG.worldSize / 2 - 600;
+    if (Math.abs(this.x) > halfWorld || Math.abs(this.y) > halfWorld) {
+      this.centerX *= 0.98;
+      this.centerY *= 0.98;
+    }
+
+    // 3. Four Corner Plasma Cannons: Targeting & Firing
+    if (player.isDead) return;
+
+    const now = Date.now();
+    const maxRange = 375; // Cut to 1/2 previous value (750 -> 375)
+
+    for (const cannon of this.cannons) {
+      // Local corner pylon position in world space
+      const cosA = Math.cos(this.angle);
+      const sinA = Math.sin(this.angle);
+      const muzzleX = this.x + cosA * cannon.localX - sinA * cannon.localY;
+      const muzzleY = this.y + sinA * cannon.localX + cosA * cannon.localY;
+
+      // Distance and angle to player ship
+      const dx = player.x - muzzleX;
+      const dy = player.y - muzzleY;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist > maxRange || dist < 12) continue;
+
+      // Turret outward diagonal axis
+      const turretAxisAngle = this.angle + cannon.baseAngle;
+      const angleToPlayer = Math.atan2(dy, dx);
+
+      // Relative angular delta
+      let diff = angleToPlayer - turretAxisAngle;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+
+      // 45 degree firing cone (+-22.5 deg = +-PI/8)
+      const halfArc = Math.PI / 8;
+
+      if (Math.abs(diff) <= halfArc) {
+        // Player is inside the 45-degree firing arc!
+        if (now - cannon.lastFireTime >= cannon.cooldown) {
+          cannon.lastFireTime = now;
+
+          // Fire plasma cannon projectile
+          const fireAngle = angleToPlayer;
+          const projVx = Math.cos(fireAngle) * CONFIG.laserSpeed;
+          const projVy = Math.sin(fireAngle) * CONFIG.laserSpeed;
+
+          projectiles.push(
+            new LaserProjectile(muzzleX, muzzleY, projVx, projVy, fireAngle, true)
+          );
+
+          // Emit sparks at corner protrusion
+          for (let i = 0; i < 4; i++) {
+            particleSystem.emitSpark(
+              muzzleX,
+              muzzleY,
+              Math.cos(fireAngle) * 2 + (Math.random() - 0.5) * 1.5,
+              Math.sin(fireAngle) * 2 + (Math.random() - 0.5) * 1.5,
+              '#00ffff',
+              12
+            );
+          }
+
+          soundEngine.playLaser();
+        }
+      }
+    }
+  }
+
+  public draw(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+
+    const img = AssetManager.getHostileDroneImage() || AssetManager.getDroneImage();
+    if (img && img.complete && img.naturalWidth !== 0) {
+      const scale = 0.082;
+      const w = img.width * scale;
+      const h = img.height * scale;
+      ctx.drawImage(img, -w / 2, -h / 2, w, h);
+
+      // Damage indicator when hit
+      if (this.hp < this.maxHp) {
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius + 3, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 30, 60, ${(this.maxHp - this.hp) * 0.45})`;
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+      }
+    } else {
+      // Vector fallback
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = '#ff1144';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = '#ff1144';
+      ctx.shadowBlur = 10;
+      ctx.stroke();
+
+      for (const c of this.cannons) {
+        ctx.beginPath();
+        ctx.arc(c.localX, c.localY, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff4400';
+        ctx.fill();
+      }
     }
 
     ctx.restore();

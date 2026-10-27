@@ -1,6 +1,7 @@
 import { ShipsCatalog, ShipDefinition } from '../types/game';
 import defaultShipStarterImg from '../../assets/images/ships/ship-starter.png';
 import defaultEnemyDroneImg from '../../assets/images/enemies/Enemy Drone.png';
+import defaultHostileDroneImg from '../../assets/images/enemies/Hostile Drone.png';
 
 export function resolveAssetPath(path: string): string {
   if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
@@ -16,6 +17,7 @@ export class AssetManager {
   public static shipsCatalog: ShipsCatalog = {};
   public static loadedImages: Record<string, HTMLImageElement> = {};
   public static droneImage: HTMLImageElement | null = null;
+  public static hostileDroneImage: HTMLImageElement | null = null;
   public static isReady = false;
 
   public static fallbackCatalog: ShipsCatalog = {
@@ -144,6 +146,32 @@ export class AssetManager {
       })
     );
 
+    // Preload Hostile Drone sprite
+    const hostileDroneImg = new Image();
+    const primaryHostileDroneSrc = resolveAssetPath('assets/images/enemies/Hostile Drone.png');
+    hostileDroneImg.src = primaryHostileDroneSrc;
+    this.hostileDroneImage = hostileDroneImg;
+
+    loadPromises.push(
+      new Promise((resolve) => {
+        hostileDroneImg.onload = () => resolve();
+        hostileDroneImg.onerror = () => {
+          console.warn(`Primary hostile drone texture failed at ${primaryHostileDroneSrc}. Attempting fallback.`);
+          hostileDroneImg.src = defaultHostileDroneImg;
+          hostileDroneImg.onload = () => resolve();
+          hostileDroneImg.onerror = () => {
+            hostileDroneImg.src = './assets/images/enemies/Hostile%20Drone.png';
+            hostileDroneImg.onload = () => resolve();
+            hostileDroneImg.onerror = () => {
+              hostileDroneImg.src = defaultEnemyDroneImg;
+              hostileDroneImg.onload = () => resolve();
+              hostileDroneImg.onerror = () => resolve();
+            };
+          };
+        };
+      })
+    );
+
     await Promise.all(loadPromises);
     this.isReady = true;
   }
@@ -158,5 +186,9 @@ export class AssetManager {
 
   public static getDroneImage(): HTMLImageElement | null {
     return this.droneImage;
+  }
+
+  public static getHostileDroneImage(): HTMLImageElement | null {
+    return this.hostileDroneImage;
   }
 }
