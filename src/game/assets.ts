@@ -39,6 +39,7 @@ export class AssetManager {
         reverseThrustPower: 0.05,
         rotationSpeed: 0.0325,
         maxShields: 100,
+        maxHull: 100,
         laserCooldown: 110,
         laserHeatLimit: 100,
         collisionRadius: 44,

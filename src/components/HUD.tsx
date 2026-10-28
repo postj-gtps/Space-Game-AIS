@@ -60,6 +60,13 @@ export const HUD: React.FC<HUDProps> = ({
       ? 'bg-amber-400'
       : 'bg-emerald-400';
 
+  const hullColorClass =
+    telemetry.hullPct <= 25
+      ? 'bg-red-500'
+      : telemetry.hullPct <= 60
+      ? 'bg-amber-400'
+      : 'bg-emerald-400';
+
   const heatColorClass = telemetry.heatPct > 80 ? 'bg-red-500' : 'bg-cyan-400';
 
   const bindTouch = (key: string) => ({
@@ -111,8 +118,17 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
         </div>
 
-        {/* WEAPON / ENERGY GAUGES */}
-        <div className={`hud-panel p-3 rounded-lg text-xs flex flex-col gap-2 transition-all ${telemetry.isOverheated ? 'border-red-500/80 shadow-[0_0_15px_rgba(255,50,0,0.35)]' : ''}`}>
+        {/* WEAPON / ENERGY / HULL GAUGES */}
+        <div
+          className={`hud-panel p-3 rounded-lg text-xs flex flex-col gap-2.5 transition-all ${
+            telemetry.isOverheated
+              ? 'border-red-500/80 shadow-[0_0_15px_rgba(255,50,0,0.35)]'
+              : telemetry.hullPct <= 25 && !telemetry.isDead
+              ? 'border-red-500/70 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+              : ''
+          }`}
+        >
+          {/* GAUGE 1: PLASMA CANNON HEAT */}
           <div>
             <div className="flex justify-between items-center mb-1">
               <span className="text-slate-400 text-[10px] flex items-center gap-1.5 font-bold">
@@ -154,17 +170,81 @@ export const HUD: React.FC<HUDProps> = ({
               </div>
             )}
           </div>
+
+          {/* GAUGE 2: DEFLECTOR SHIELDS */}
           <div>
-            <div className="flex justify-between mb-1">
-              <span className="text-slate-400 text-[10px]">DEFLECTOR SHIELDS</span>
-              <span className="text-[10px] text-cyan-300 font-bold">{telemetry.shieldPct}%</span>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-slate-400 text-[10px] font-bold flex items-center gap-1.5">
+                DEFLECTOR SHIELDS
+                {telemetry.shieldPct === 0 && !telemetry.isDead && (
+                  <span className="animate-pulse text-[8px] font-bold text-red-400 bg-red-950/80 px-1 py-0.2 rounded border border-red-500/50">
+                    DEPLETED
+                  </span>
+                )}
+              </span>
+              <span
+                className={`text-[10px] font-bold ${
+                  telemetry.shieldPct === 0
+                    ? 'text-red-400'
+                    : telemetry.shieldPct < 30
+                    ? 'text-red-400'
+                    : telemetry.shieldPct < 70
+                    ? 'text-amber-400'
+                    : 'text-cyan-300'
+                }`}
+              >
+                {telemetry.shieldPct}%
+              </span>
             </div>
-            <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden border border-cyan-500/30">
+            <div className={`w-full h-2 bg-slate-900 rounded-full overflow-hidden border ${telemetry.shieldPct === 0 ? 'border-red-500/50' : 'border-cyan-500/30'}`}>
               <div
                 className={`h-full transition-all duration-75 ${shieldColorClass}`}
                 style={{ width: `${telemetry.shieldPct}%` }}
               />
             </div>
+          </div>
+
+          {/* GAUGE 3: HULL INTEGRITY */}
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <span className="text-slate-400 text-[10px] font-bold flex items-center gap-1.5">
+                HULL INTEGRITY
+                {telemetry.hullPct <= 25 && !telemetry.isDead && (
+                  <span className="animate-pulse text-[8px] font-bold text-red-300 bg-red-950/90 px-1.5 py-0.2 rounded border border-red-500/70 tracking-wider">
+                    CRITICAL
+                  </span>
+                )}
+              </span>
+              <span
+                className={`text-[10px] font-bold ${
+                  telemetry.hullPct <= 25
+                    ? 'text-red-400 font-mono animate-pulse'
+                    : telemetry.hullPct <= 60
+                    ? 'text-amber-400'
+                    : 'text-emerald-400'
+                }`}
+              >
+                {telemetry.hullPct}%
+              </span>
+            </div>
+            <div
+              className={`w-full h-2 bg-slate-900 rounded-full overflow-hidden border ${
+                telemetry.hullPct <= 25 ? 'border-red-500/70 ring-1 ring-red-500/40' : 'border-cyan-500/30'
+              }`}
+            >
+              <div
+                className={`h-full transition-all duration-75 ${
+                  telemetry.hullPct <= 25 ? 'bg-red-500 animate-pulse' : hullColorClass
+                }`}
+                style={{ width: `${telemetry.hullPct}%` }}
+              />
+            </div>
+            {telemetry.hullPct <= 25 && !telemetry.isDead && (
+              <div className="text-[9px] text-red-400/90 font-mono mt-1 flex justify-between items-center animate-pulse">
+                <span>STRUCTURAL WARNING</span>
+                <span className="font-bold">BREACH IMMINENT</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -366,8 +446,8 @@ export const HUD: React.FC<HUDProps> = ({
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">CAUSE OF IMPACT:</span>
-                <span className="text-amber-400">COLLISION DAMAGE</span>
+                <span className="text-slate-400">STATUS:</span>
+                <span className="text-red-400 font-bold">HULL INTEGRITY DEPLETED (0%)</span>
               </div>
             </div>
             <button

@@ -608,6 +608,8 @@ export class PlayerShip {
 
   public maxShields = 100;
   public shields = 100;
+  public maxHull = 100;
+  public hull = 100;
   public lastDamageTime = 0;
   public rechargeDelay = 2200;
   public rechargeRate = 0.35;
@@ -631,6 +633,8 @@ export class PlayerShip {
     this.vy = 0;
     this.angle = -Math.PI / 2;
     this.shields = this.config.stats.maxShields;
+    this.maxHull = this.config.stats.maxHull ?? 100;
+    this.hull = this.maxHull;
     this.laserHeat = 0;
     this.isOverheated = false;
     this.overheatEndTime = 0;
@@ -697,9 +701,19 @@ export class PlayerShip {
 
     triggerShake(10, 10);
 
+    let damageToHull = 0;
+
     if (this.shields > 0) {
-      this.shields = Math.max(0, this.shields - amount);
-      soundEngine.playShieldHit();
+      if (amount <= this.shields) {
+        this.shields -= amount;
+        soundEngine.playShieldHit();
+      } else {
+        // Shield absorbed partial hit down to zero; remaining damage punches into hull
+        damageToHull = amount - this.shields;
+        this.shields = 0;
+        soundEngine.playShieldHit();
+        particleSystem.emitExplosion(this.x, this.y, 20, '#00ffff');
+      }
 
       for (let i = 0; i < 15; i++) {
         particleSystem.emitSpark(
@@ -711,12 +725,42 @@ export class PlayerShip {
           20
         );
       }
-
-      if (this.shields === 0) {
-        particleSystem.emitExplosion(this.x, this.y, 20, '#00ffff');
-      }
     } else {
-      this.explode(soundEngine, particleSystem, triggerShake, onGameOver);
+      // Deflector shields at zero: full hit depletes hull integrity
+      damageToHull = amount;
+    }
+
+    if (damageToHull > 0) {
+      this.hull = Math.max(0, this.hull - damageToHull);
+      soundEngine.playHullHit();
+      triggerShake(14, 14);
+
+      // Emits sparks and burning hull debris
+      for (let i = 0; i < 18; i++) {
+        particleSystem.emitSpark(
+          this.x + (Math.random() - 0.5) * 25,
+          this.y + (Math.random() - 0.5) * 25,
+          (Math.random() - 0.5) * 7,
+          (Math.random() - 0.5) * 7,
+          Math.random() > 0.4 ? '#ff5500' : '#ffcc00',
+          24
+        );
+      }
+      particleSystem.emitSmoke(
+        this.x,
+        this.y,
+        this.vx * 0.2 + (Math.random() - 0.5) * 1.5,
+        this.vy * 0.2 + (Math.random() - 0.5) * 1.5,
+        'rgba(90, 100, 115, 0.7)',
+        6,
+        0.025,
+        0.35
+      );
+
+      // When Hull Integrity reaches zero, the player's ship explodes!
+      if (this.hull <= 0) {
+        this.explode(soundEngine, particleSystem, triggerShake, onGameOver);
+      }
     }
   }
 
@@ -839,6 +883,31 @@ export class PlayerShip {
     if (this.x < -halfWorld) this.x = halfWorld;
     if (this.y > halfWorld) this.y = -halfWorld;
     if (this.y < -halfWorld) this.y = halfWorld;
+
+    // Visual hull stress cue: emit smoke and sparks when hull is critically damaged
+    const maxHull = cfg.stats.maxHull ?? 100;
+    if (this.hull < maxHull * 0.4 && Math.random() < 0.3) {
+      particleSystem.emitSmoke(
+        this.x + (Math.random() - 0.5) * 16,
+        this.y + (Math.random() - 0.5) * 16,
+        -this.vx * 0.2 + (Math.random() - 0.5) * 0.8,
+        -this.vy * 0.2 + (Math.random() - 0.5) * 0.8,
+        'rgba(90, 95, 105, 0.55)',
+        3.5 + Math.random() * 2.5,
+        0.028,
+        0.2
+      );
+      if (Math.random() < 0.25) {
+        particleSystem.emitSpark(
+          this.x + (Math.random() - 0.5) * 12,
+          this.y + (Math.random() - 0.5) * 12,
+          (Math.random() - 0.5) * 2,
+          (Math.random() - 0.5) * 2,
+          '#ffaa00',
+          14
+        );
+      }
+    }
 
     const now = Date.now();
 

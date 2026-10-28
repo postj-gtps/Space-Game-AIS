@@ -39,6 +39,7 @@ export const App: React.FC = () => {
     thrustStatus: 'IDLE (DRIFT)',
     heatPct: 0,
     shieldPct: 100,
+    hullPct: 100,
     isDead: false,
   });
 
@@ -413,7 +414,7 @@ export const App: React.FC = () => {
         if (!isDockedRef.current) {
           player.update(deltaTime, keys, soundEngine, particleSystem, projectiles);
         } else {
-          // Shore power while moored: replenish shields & dissipate heat
+          // Shore power while moored: replenish shields & dissipate heat (hull repairs reserved for Ship Dealer)
           if (player.shields < player.config.stats.maxShields) {
             player.shields = Math.min(player.config.stats.maxShields, player.shields + 0.5);
           }
@@ -805,6 +806,8 @@ export const App: React.FC = () => {
 
         const heatPct = Math.round(player.laserHeat);
         const shieldPct = Math.round((player.shields / cfg.stats.maxShields) * 100);
+        const maxHull = cfg.stats.maxHull ?? 100;
+        const hullPct = Math.max(0, Math.min(100, Math.round((player.hull / maxHull) * 100)));
 
         const cartesianX = Math.round(player.x / 100) || 0;
         const cartesianY = Math.round(-player.y / 100) || 0;
@@ -823,6 +826,7 @@ export const App: React.FC = () => {
           thrustStatus,
           heatPct,
           shieldPct,
+          hullPct,
           isDead: player.isDead,
           isOverheated: player.isOverheated,
           overheatRemainingSec,

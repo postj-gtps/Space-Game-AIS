@@ -16,6 +16,7 @@ export interface ShipStats {
   reverseThrustPower: number;
   rotationSpeed: number;
   maxShields: number;
+  maxHull?: number;
   laserCooldown: number;
   laserHeatLimit: number;
   collisionRadius: number;
@@ -48,6 +49,7 @@ export interface TelemetryData {
   thrustStatus: 'OFFLINE' | 'FORWARD [100%]' | 'REVERSE [RCS]' | 'IDLE (DRIFT)' | 'DOCKED [STATION]';
   heatPct: number;
   shieldPct: number;
+  hullPct: number;
   isDead: boolean;
   isOverheated?: boolean;
   overheatRemainingSec?: number;
