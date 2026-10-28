@@ -195,6 +195,7 @@ export class Asteroid {
   public x: number;
   public y: number;
   public size: number;
+  public variantIndex: number;
   public radius: number;
   public vx: number;
   public vy: number;
@@ -203,15 +204,16 @@ export class Asteroid {
   public numPoints: number;
   public offsets: number[];
 
-  constructor(x: number, y: number, size = 3) {
+  constructor(x: number, y: number, size = 3, variantIndex?: number, vx?: number, vy?: number) {
     this.x = x;
     this.y = y;
     this.size = size;
+    this.variantIndex = variantIndex !== undefined ? variantIndex : Math.floor(Math.random() * 4);
     this.radius = size * 16;
-    this.vx = (Math.random() - 0.5) * (4 / size);
-    this.vy = (Math.random() - 0.5) * (4 / size);
+    this.vx = vx !== undefined ? vx : (Math.random() - 0.5) * (4 / size);
+    this.vy = vy !== undefined ? vy : (Math.random() - 0.5) * (4 / size);
     this.angle = Math.random() * Math.PI * 2;
-    this.rotSpeed = (Math.random() - 0.5) * 0.03;
+    this.rotSpeed = (Math.random() - 0.5) * (0.015 + 0.02 / size);
 
     this.numPoints = 8 + Math.floor(Math.random() * 5);
     this.offsets = [];
@@ -237,22 +239,35 @@ export class Asteroid {
     ctx.translate(this.x, this.y);
     ctx.rotate(this.angle);
 
-    ctx.beginPath();
-    for (let i = 0; i < this.numPoints; i++) {
-      const theta = (i / this.numPoints) * Math.PI * 2;
-      const r = this.radius * this.offsets[i];
-      const px = Math.cos(theta) * r;
-      const py = Math.sin(theta) * r;
-      if (i === 0) ctx.moveTo(px, py);
-      else ctx.lineTo(px, py);
-    }
-    ctx.closePath();
+    const img = AssetManager.getAsteroidImage(this.size, this.variantIndex);
+    if (img && img.complete && img.naturalWidth !== 0) {
+      // Normalize rendered dimensions so that relative scales match size * 16 exactly
+      // Bounding diameter is radius * 2.3 to naturally encompass the collision circle
+      const maxDim = Math.max(img.naturalWidth, img.naturalHeight);
+      const targetMax = this.radius * 2.3;
+      const scale = targetMax / maxDim;
+      const w = img.naturalWidth * scale;
+      const h = img.naturalHeight * scale;
 
-    ctx.fillStyle = '#0a101d';
-    ctx.fill();
-    ctx.strokeStyle = '#2e5d88';
-    ctx.lineWidth = 1.8;
-    ctx.stroke();
+      ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    } else {
+      ctx.beginPath();
+      for (let i = 0; i < this.numPoints; i++) {
+        const theta = (i / this.numPoints) * Math.PI * 2;
+        const r = this.radius * this.offsets[i];
+        const px = Math.cos(theta) * r;
+        const py = Math.sin(theta) * r;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+
+      ctx.fillStyle = '#0a101d';
+      ctx.fill();
+      ctx.strokeStyle = '#2e5d88';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+    }
 
     ctx.restore();
   }

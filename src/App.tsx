@@ -246,7 +246,9 @@ export const App: React.FC = () => {
     for (let i = 0; i < CONFIG.maxAsteroids; i++) {
       const dist = 300 + Math.random() * (CONFIG.worldSize / 2 - 400);
       const angle = Math.random() * Math.PI * 2;
-      astList.push(new Asteroid(Math.cos(angle) * dist, Math.sin(angle) * dist, Math.floor(Math.random() * 3) + 1));
+      const size = Math.floor(Math.random() * 3) + 1;
+      const variant = Math.floor(Math.random() * 4);
+      astList.push(new Asteroid(Math.cos(angle) * dist, Math.sin(angle) * dist, size, variant));
     }
     asteroidsRef.current = astList;
 
@@ -541,16 +543,82 @@ export const App: React.FC = () => {
               projectiles.splice(pIdx, 1);
 
               if (ast.size > 1) {
-                asteroids.push(new Asteroid(ast.x, ast.y, ast.size - 1));
-                asteroids.push(new Asteroid(ast.x, ast.y, ast.size - 1));
+                const nextSize = ast.size - 1;
+                // Compute divergent impulse perpendicular to projectile trajectory
+                const projAngle = Math.atan2(proj.vy, proj.vx);
+                const perpAngle = projAngle + Math.PI / 2;
+                const spreadSpeed = 1.0 + Math.random() * 0.8;
+                const offsetDist = ast.radius * 0.45;
+
+                const v1x = ast.vx * 0.6 + Math.cos(perpAngle) * spreadSpeed + (Math.random() - 0.5) * 0.5;
+                const v1y = ast.vy * 0.6 + Math.sin(perpAngle) * spreadSpeed + (Math.random() - 0.5) * 0.5;
+                const a1 = new Asteroid(
+                  ast.x + Math.cos(perpAngle) * offsetDist,
+                  ast.y + Math.sin(perpAngle) * offsetDist,
+                  nextSize,
+                  Math.floor(Math.random() * 4),
+                  v1x,
+                  v1y
+                );
+
+                const v2x = ast.vx * 0.6 - Math.cos(perpAngle) * spreadSpeed + (Math.random() - 0.5) * 0.5;
+                const v2y = ast.vy * 0.6 - Math.sin(perpAngle) * spreadSpeed + (Math.random() - 0.5) * 0.5;
+                const a2 = new Asteroid(
+                  ast.x - Math.cos(perpAngle) * offsetDist,
+                  ast.y - Math.sin(perpAngle) * offsetDist,
+                  nextSize,
+                  Math.floor(Math.random() * 4),
+                  v2x,
+                  v2y
+                );
+
+                asteroids.push(a1, a2);
                 soundEngine.playHitSound();
+
+                // Emitted rock debris particles matching mineral tones
+                for (let k = 0; k < 14; k++) {
+                  particleSystem.emitSpark(
+                    ast.x + (Math.random() - 0.5) * ast.radius,
+                    ast.y + (Math.random() - 0.5) * ast.radius,
+                    ast.vx * 0.4 + (Math.random() - 0.5) * 3,
+                    ast.vy * 0.4 + (Math.random() - 0.5) * 3,
+                    k % 2 === 0 ? '#b0bdcb' : '#728193',
+                    18
+                  );
+                }
               } else {
                 soundEngine.playExplosion(false);
+                for (let k = 0; k < 18; k++) {
+                  particleSystem.emitSpark(
+                    ast.x,
+                    ast.y,
+                    ast.vx * 0.3 + (Math.random() - 0.5) * 4,
+                    ast.vy * 0.3 + (Math.random() - 0.5) * 4,
+                    k % 2 === 0 ? '#b0bdcb' : '#ff9944',
+                    22
+                  );
+                }
               }
 
               asteroids.splice(aIdx, 1);
               break;
             }
+          }
+        }
+
+        // Replenish asteroid field over time if population drops
+        if (asteroids.length < CONFIG.maxAsteroids) {
+          if (Math.random() < 0.012) {
+            const spawnAngle = Math.random() * Math.PI * 2;
+            const spawnDist = 1400 + Math.random() * 2200;
+            asteroids.push(
+              new Asteroid(
+                player.x + Math.cos(spawnAngle) * spawnDist,
+                player.y + Math.sin(spawnAngle) * spawnDist,
+                3, // Spawn new large asteroid
+                Math.floor(Math.random() * 4)
+              )
+            );
           }
         }
 
@@ -738,7 +806,8 @@ export const App: React.FC = () => {
               if (Math.hypot(dx, dy) < range) {
                 const rx = center + (dx / range) * center;
                 const ry = center + (dy / range) * center;
-                radarCtx.fillRect(rx - 1, ry - 1, 2, 2);
+                const dotSize = ast.size === 3 ? 3 : ast.size === 2 ? 2.2 : 1.5;
+                radarCtx.fillRect(rx - dotSize / 2, ry - dotSize / 2, dotSize, dotSize);
               }
             }
 

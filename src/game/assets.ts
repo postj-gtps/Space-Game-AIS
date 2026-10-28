@@ -3,6 +3,12 @@ import defaultShipStarterImg from '../../assets/images/ships/ship-starter.png';
 import defaultEnemyDroneImg from '../../assets/images/enemies/Enemy Drone.png';
 import defaultHostileDroneImg from '../../assets/images/enemies/Hostile Drone.png';
 import defaultBaseStationImg from '../../assets/images/stations/Base Station.png';
+import defaultLargeAsteroidImg from '../../assets/images/asteroids/Large Asteroid.png';
+import defaultMediumAsteroidImg from '../../assets/images/asteroids/Medium Asteroid.png';
+import defaultSmallRockAImg from '../../assets/images/asteroids/Small Rock A.png';
+import defaultSmallRockBImg from '../../assets/images/asteroids/Small Rock B.png';
+import defaultSmallRockCImg from '../../assets/images/asteroids/Small Rock C.png';
+import defaultSmallRockDImg from '../../assets/images/asteroids/Small Rock D.png';
 
 export function resolveAssetPath(path: string): string {
   if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
@@ -20,6 +26,9 @@ export class AssetManager {
   public static droneImage: HTMLImageElement | null = null;
   public static hostileDroneImage: HTMLImageElement | null = null;
   public static baseStationImage: HTMLImageElement | null = null;
+  public static largeAsteroidImage: HTMLImageElement | null = null;
+  public static mediumAsteroidImage: HTMLImageElement | null = null;
+  public static smallRockImages: HTMLImageElement[] = [];
   public static isReady = false;
 
   public static fallbackCatalog: ShipsCatalog = {
@@ -197,6 +206,67 @@ export class AssetManager {
       })
     );
 
+    // Helper for loading textures with bundled and encoded fallbacks
+    const preloadTexture = (
+      relativePath: string,
+      fallbackSrc: string,
+      onAssigned: (img: HTMLImageElement) => void
+    ): Promise<void> => {
+      const img = new Image();
+      const primary = resolveAssetPath(relativePath);
+      img.src = primary;
+      onAssigned(img);
+
+      return new Promise<void>((resolve) => {
+        img.onload = () => resolve();
+        img.onerror = () => {
+          console.warn(`Primary texture failed for ${relativePath}. Attempting fallback.`);
+          img.src = fallbackSrc;
+          img.onload = () => resolve();
+          img.onerror = () => {
+            img.src = resolveAssetPath(encodeURI(relativePath));
+            img.onload = () => resolve();
+            img.onerror = () => {
+              img.src = `./${relativePath.replace(/^\.?\//, '')}`;
+              img.onload = () => resolve();
+              img.onerror = () => resolve();
+            };
+          };
+        };
+      });
+    };
+
+    // Preload Large Asteroid
+    loadPromises.push(
+      preloadTexture('assets/images/asteroids/Large Asteroid.png', defaultLargeAsteroidImg, (img) => {
+        this.largeAsteroidImage = img;
+      })
+    );
+
+    // Preload Medium Asteroid
+    loadPromises.push(
+      preloadTexture('assets/images/asteroids/Medium Asteroid.png', defaultMediumAsteroidImg, (img) => {
+        this.mediumAsteroidImage = img;
+      })
+    );
+
+    // Preload Small Rocks A - D
+    this.smallRockImages = [];
+    const smallRockConfigs = [
+      { path: 'assets/images/asteroids/Small Rock A.png', fallback: defaultSmallRockAImg },
+      { path: 'assets/images/asteroids/Small Rock B.png', fallback: defaultSmallRockBImg },
+      { path: 'assets/images/asteroids/Small Rock C.png', fallback: defaultSmallRockCImg },
+      { path: 'assets/images/asteroids/Small Rock D.png', fallback: defaultSmallRockDImg },
+    ];
+
+    smallRockConfigs.forEach((rockCfg, idx) => {
+      loadPromises.push(
+        preloadTexture(rockCfg.path, rockCfg.fallback, (img) => {
+          this.smallRockImages[idx] = img;
+        })
+      );
+    });
+
     await Promise.all(loadPromises);
     this.isReady = true;
   }
@@ -219,5 +289,29 @@ export class AssetManager {
 
   public static getBaseStationImage(): HTMLImageElement | null {
     return this.baseStationImage;
+  }
+
+  public static getLargeAsteroidImage(): HTMLImageElement | null {
+    return this.largeAsteroidImage;
+  }
+
+  public static getMediumAsteroidImage(): HTMLImageElement | null {
+    return this.mediumAsteroidImage;
+  }
+
+  public static getSmallRockImage(index = 0): HTMLImageElement | null {
+    if (this.smallRockImages.length === 0) return null;
+    const safeIdx = Math.abs(index) % this.smallRockImages.length;
+    return this.smallRockImages[safeIdx] || this.smallRockImages[0] || null;
+  }
+
+  public static getAsteroidImage(size: number, variantIndex = 0): HTMLImageElement | null {
+    if (size >= 3) {
+      return this.largeAsteroidImage;
+    } else if (size === 2) {
+      return this.mediumAsteroidImage;
+    } else {
+      return this.getSmallRockImage(variantIndex);
+    }
   }
 }
