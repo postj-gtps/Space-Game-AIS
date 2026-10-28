@@ -612,6 +612,7 @@ export class PlayerShip {
   public rechargeDelay = 2200;
   public rechargeRate = 0.35;
   public invulnerableTimer = 0;
+  public dockingGraceTimer = 0;
   public isDead = false;
 
   constructor(x = 0, y = 0) {
@@ -635,6 +636,7 @@ export class PlayerShip {
     this.overheatEndTime = 0;
     this.isDead = false;
     this.invulnerableTimer = 60;
+    this.dockingGraceTimer = 0;
   }
 
   public triggerOverheat(soundEngine: SoundEngine, particleSystem: ParticleSystem): void {
@@ -749,13 +751,17 @@ export class PlayerShip {
   }
 
   public update(
-    _deltaTime: number,
+    deltaTime: number,
     keys: InputState,
     soundEngine: SoundEngine,
     particleSystem: ParticleSystem,
     projectiles: LaserProjectile[]
   ): void {
     if (this.isDead) return;
+
+    if (this.dockingGraceTimer > 0) {
+      this.dockingGraceTimer = Math.max(0, this.dockingGraceTimer - deltaTime);
+    }
 
     const cfg = this.config;
     const stats = cfg.stats;
@@ -1162,3 +1168,93 @@ export function drawSectorGrid(
   }
   ctx.restore();
 }
+
+export class BaseStation {
+  public x: number;
+  public y: number;
+  public angle: number = 0;
+  public rotSpeed: number = 0.0006;
+  public radius: number = 430; // 10x player ship collision scale
+  public scale: number = 1.33; // 10x player ship rendered size (~950px footprint)
+  public name: string = 'STARPORT VALIANT-PRIME';
+  public designation: string = 'SECTOR 0-A // ORBITAL STATION';
+
+  constructor(x = 0, y = 350) {
+    this.x = x;
+    this.y = y;
+  }
+
+  public update(): void {
+    this.angle += this.rotSpeed;
+    if (this.angle > Math.PI * 2) this.angle -= Math.PI * 2;
+  }
+
+  public checkDocking(player: PlayerShip): boolean {
+    if (player.isDead || player.dockingGraceTimer > 0) return false;
+    const playerRadius = player.config.stats.collisionRadius || 44;
+    const dist = Math.hypot(player.x - this.x, player.y - this.y);
+    return dist <= this.radius + playerRadius;
+  }
+
+  public draw(ctx: CanvasRenderingContext2D): void {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.angle);
+
+    const img = AssetManager.getBaseStationImage();
+    if (img && img.complete && img.naturalWidth !== 0) {
+      const w = img.width * this.scale;
+      const h = img.height * this.scale;
+      ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    } else {
+      // High-detail vector fallback
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(0, 240, 255, 0.7)';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius * 0.75, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(0, 200, 255, 0.4)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius * 0.35, 0, Math.PI * 2);
+      ctx.fillStyle = '#061325';
+      ctx.fill();
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      for (let i = 0; i < 6; i++) {
+        const spoke = (i / 6) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(spoke) * this.radius * 0.35, Math.sin(spoke) * this.radius * 0.35);
+        ctx.lineTo(Math.cos(spoke) * this.radius, Math.sin(spoke) * this.radius);
+        ctx.strokeStyle = 'rgba(0, 240, 255, 0.45)';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+    }
+
+    // Atmospheric runway approach beacons
+    const now = Date.now();
+    const beaconPulse = Math.sin(now * 0.003) * 0.3 + 0.7;
+    for (let i = 0; i < 12; i++) {
+      const lightAngle = (i / 12) * Math.PI * 2;
+      const lx = Math.cos(lightAngle) * (this.radius * 0.98);
+      const ly = Math.sin(lightAngle) * (this.radius * 0.98);
+      ctx.beginPath();
+      ctx.arc(lx, ly, 4, 0, Math.PI * 2);
+      ctx.fillStyle = i % 2 === 0 ? `rgba(0, 240, 255, ${beaconPulse})` : `rgba(255, 180, 0, ${beaconPulse})`;
+      ctx.shadowColor = i % 2 === 0 ? '#00f0ff' : '#ffb400';
+      ctx.shadowBlur = 8;
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+

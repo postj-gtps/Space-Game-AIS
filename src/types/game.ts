@@ -45,7 +45,7 @@ export interface TelemetryData {
   headingDeg: number;
   coordX: number;
   coordY: number;
-  thrustStatus: 'OFFLINE' | 'FORWARD [100%]' | 'REVERSE [RCS]' | 'IDLE (DRIFT)';
+  thrustStatus: 'OFFLINE' | 'FORWARD [100%]' | 'REVERSE [RCS]' | 'IDLE (DRIFT)' | 'DOCKED [STATION]';
   heatPct: number;
   shieldPct: number;
   isDead: boolean;

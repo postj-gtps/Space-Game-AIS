@@ -263,4 +263,121 @@ export class SoundEngine {
     osc.start(now);
     osc.stop(now + 0.04);
   }
+
+  public playDockingClamp(): void {
+    if (!this.enabled || !this.ctx) return;
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+
+    const now = this.ctx.currentTime;
+
+    // Resonant mechanical clamp impact
+    const oscLow = this.ctx.createOscillator();
+    const gainLow = this.ctx.createGain();
+    oscLow.type = 'triangle';
+    oscLow.frequency.setValueAtTime(140, now);
+    oscLow.frequency.exponentialRampToValueAtTime(45, now + 0.35);
+
+    gainLow.gain.setValueAtTime(0.4, now);
+    gainLow.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+
+    oscLow.connect(gainLow);
+    gainLow.connect(this.ctx.destination);
+    oscLow.start(now);
+    oscLow.stop(now + 0.35);
+
+    // Harmonic docking magnetic chime sequence
+    [220, 330, 440].forEach((freq, i) => {
+      if (!this.ctx) return;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + 0.08 * i);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.5, now + 0.08 * i + 0.2);
+
+      gain.gain.setValueAtTime(0.18, now + 0.08 * i);
+      gain.gain.exponentialRampToValueAtTime(0.005, now + 0.08 * i + 0.2);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now + 0.08 * i);
+      osc.stop(now + 0.08 * i + 0.2);
+    });
+  }
+
+  public playUndocking(): void {
+    if (!this.enabled || !this.ctx) return;
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+
+    const now = this.ctx.currentTime;
+
+    // Pneumatic release hiss
+    const dur = 0.4;
+    const bufferSize = Math.floor(this.ctx.sampleRate * dur);
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 1.8);
+    }
+    const noise = this.ctx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1800, now);
+    filter.frequency.exponentialRampToValueAtTime(800, now + dur);
+    filter.Q.value = 1.5;
+
+    const noiseGain = this.ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.25, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.01, now + dur);
+
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(this.ctx.destination);
+    noise.start(now);
+
+    // Release tonal chime
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(520, now + 0.05);
+    osc.frequency.exponentialRampToValueAtTime(320, now + 0.3);
+    gain.gain.setValueAtTime(0.2, now + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.005, now + 0.3);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now + 0.05);
+    osc.stop(now + 0.3);
+  }
+
+  public playMenuBeep(isSelect = false): void {
+    if (!this.enabled || !this.ctx) return;
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sine';
+    const freq = isSelect ? 880 : 540;
+    osc.frequency.setValueAtTime(freq, now);
+    if (isSelect) {
+      osc.frequency.setValueAtTime(1100, now + 0.03);
+    }
+
+    const dur = isSelect ? 0.08 : 0.04;
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.005, now + dur);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + dur);
+  }
 }

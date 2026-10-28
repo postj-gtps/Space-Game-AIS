@@ -9,6 +9,7 @@ import {
   Asteroid,
   TargetDrone,
   HostileDrone,
+  BaseStation,
   ParticleSystem,
   Starfield,
   NebulaRenderer,
@@ -16,6 +17,7 @@ import {
   InputState,
 } from './game/engine';
 import { HUD } from './components/HUD';
+import { StationModal } from './components/StationModal';
 
 export const App: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -40,9 +42,13 @@ export const App: React.FC = () => {
     isDead: false,
   });
 
+  const [isDocked, setIsDocked] = useState(false);
+  const isDockedRef = useRef(false);
+
   // Keep references to game engine instances
   const soundEngineRef = useRef<SoundEngine>(new SoundEngine());
   const playerRef = useRef<PlayerShip>(new PlayerShip(0, 0));
+  const baseStationRef = useRef<BaseStation>(new BaseStation(0, 350));
   const starfieldRef = useRef<Starfield>(new Starfield(350));
   const nebulaRef = useRef<NebulaRenderer>(new NebulaRenderer());
   const particleSystemRef = useRef<ParticleSystem>(new ParticleSystem());
@@ -106,7 +112,33 @@ export const App: React.FC = () => {
     setGameStarted(true);
   }, []);
 
+  const handleUndock = useCallback(() => {
+    isDockedRef.current = false;
+    setIsDocked(false);
+    const player = playerRef.current;
+    const baseStation = baseStationRef.current;
+    soundEngineRef.current.playUndocking();
+
+    // Calculate angle outward from station center to player
+    let angle = Math.atan2(player.y - baseStation.y, player.x - baseStation.x);
+    if (Math.hypot(player.x - baseStation.x, player.y - baseStation.y) < 5) {
+      angle = -Math.PI / 2; // Default facing space upward
+    }
+
+    // Place player safely outside station perimeter
+    const spawnDist = baseStation.radius + 85;
+    player.x = baseStation.x + Math.cos(angle) * spawnDist;
+    player.y = baseStation.y + Math.sin(angle) * spawnDist;
+    player.angle = angle;
+    player.vx = Math.cos(angle) * 2.2;
+    player.vy = Math.sin(angle) * 2.2;
+    player.dockingGraceTimer = 3.5; // 3.5 second collision grace
+    player.invulnerableTimer = 180;
+  }, []);
+
   const handleRestartGame = useCallback(() => {
+    isDockedRef.current = false;
+    setIsDocked(false);
     setGameOver(false);
     playerRef.current.reset();
   }, []);
@@ -132,6 +164,13 @@ export const App: React.FC = () => {
       soundEngineRef.current.init();
       const keys = keysRef.current;
       const player = playerRef.current;
+
+      if (isDockedRef.current) {
+        if (code === 'Digit5' || code === 'Numpad5' || code === 'Escape') {
+          handleUndock();
+        }
+        return;
+      }
 
       if (player.isDead && (code === 'KeyR' || code === 'Space')) {
         handleRestartGame();
@@ -172,7 +211,7 @@ export const App: React.FC = () => {
           break;
       }
     },
-    [handleRestartGame, handleZoomIn, handleZoomOut, handleZoomReset]
+    [handleRestartGame, handleUndock, handleZoomIn, handleZoomOut, handleZoomReset]
   );
 
   const handleKeyUpAction = useCallback((code: string) => {
@@ -350,8 +389,36 @@ export const App: React.FC = () => {
         const nebula = nebulaRef.current;
         const keys = keysRef.current;
 
+        const baseStation = baseStationRef.current;
+        baseStation.update();
+
+        // Check Docking Contact with Base Station
+        if (!player.isDead && !isDockedRef.current) {
+          if (baseStation.checkDocking(player)) {
+            player.vx = 0;
+            player.vy = 0;
+            keys.forward = false;
+            keys.reverse = false;
+            keys.left = false;
+            keys.right = false;
+            keys.fire = false;
+            isDockedRef.current = true;
+            setIsDocked(true);
+            soundEngine.playDockingClamp();
+            triggerScreenShake(6, 4);
+          }
+        }
+
         // Player & Projectiles update
-        player.update(deltaTime, keys, soundEngine, particleSystem, projectiles);
+        if (!isDockedRef.current) {
+          player.update(deltaTime, keys, soundEngine, particleSystem, projectiles);
+        } else {
+          // Shore power while moored: replenish shields & dissipate heat
+          if (player.shields < player.config.stats.maxShields) {
+            player.shields = Math.min(player.config.stats.maxShields, player.shields + 0.5);
+          }
+          player.laserHeat = Math.max(0, player.laserHeat - 0.8);
+        }
 
         for (let i = projectiles.length - 1; i >= 0; i--) {
           projectiles[i].update(particleSystem);
@@ -366,8 +433,8 @@ export const App: React.FC = () => {
         for (const hd of hostileDrones) hd.update(player, soundEngine, particleSystem, projectiles);
         particleSystem.update();
 
-        // Check Collisions
-        if (!player.isDead) {
+        // Check Collisions (suppressed while docked in station berth)
+        if (!player.isDead && !isDockedRef.current) {
           const radius = player.config.stats.collisionRadius || 20;
 
           // Player vs Asteroid
@@ -436,7 +503,7 @@ export const App: React.FC = () => {
         }
 
         // Hostile Projectiles vs Player
-        if (!player.isDead) {
+        if (!player.isDead && !isDockedRef.current) {
           const pRadius = player.config.stats.collisionRadius || 20;
           for (let pIdx = projectiles.length - 1; pIdx >= 0; pIdx--) {
             const proj = projectiles[pIdx];
@@ -578,6 +645,7 @@ export const App: React.FC = () => {
         nebula.draw(ctx, showNebula);
         drawSectorGrid(ctx, player.x, player.y, canvas.width / currentZoom, canvas.height / currentZoom, showGrid);
 
+        baseStation.draw(ctx);
         for (const ast of asteroids) ast.draw(ctx);
         for (const drone of drones) drone.draw(ctx);
         for (const hd of hostileDrones) hd.draw(ctx);
@@ -609,6 +677,58 @@ export const App: React.FC = () => {
             radarCtx.beginPath();
             radarCtx.arc(center, center, center * 0.8, 0, Math.PI * 2);
             radarCtx.stroke();
+
+            // Base Station on Radar
+            const bsDx = baseStation.x - player.x;
+            const bsDy = baseStation.y - player.y;
+            const bsDist = Math.hypot(bsDx, bsDy);
+
+            if (bsDist < range) {
+              const rx = center + (bsDx / range) * center;
+              const ry = center + (bsDy / range) * center;
+              const pulse = Math.sin(currentTime * 0.005) * 1.5 + 6.5;
+
+              radarCtx.save();
+              radarCtx.strokeStyle = '#00f0ff';
+              radarCtx.lineWidth = 1.5;
+              radarCtx.beginPath();
+              radarCtx.arc(rx, ry, pulse, 0, Math.PI * 2);
+              radarCtx.stroke();
+
+              radarCtx.fillStyle = '#00f0ff';
+              radarCtx.beginPath();
+              radarCtx.arc(rx, ry, 3, 0, Math.PI * 2);
+              radarCtx.fill();
+
+              radarCtx.font = 'bold 8px monospace';
+              radarCtx.fillStyle = '#00f0ff';
+              radarCtx.textAlign = 'center';
+              radarCtx.fillText('BASE', rx, ry - 9);
+              radarCtx.restore();
+            } else {
+              // Directional waypoint pointer on radar outer rim
+              const angleToStation = Math.atan2(bsDy, bsDx);
+              const edgeR = center * 0.90;
+              const ex = center + Math.cos(angleToStation) * edgeR;
+              const ey = center + Math.sin(angleToStation) * edgeR;
+
+              radarCtx.save();
+              radarCtx.fillStyle = '#00f0ff';
+              radarCtx.beginPath();
+              radarCtx.arc(ex, ey, 3, 0, Math.PI * 2);
+              radarCtx.fill();
+
+              radarCtx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+              radarCtx.lineWidth = 1;
+              radarCtx.beginPath();
+              radarCtx.moveTo(
+                center + Math.cos(angleToStation) * (center * 0.78),
+                center + Math.sin(angleToStation) * (center * 0.78)
+              );
+              radarCtx.lineTo(ex, ey);
+              radarCtx.stroke();
+              radarCtx.restore();
+            }
 
             radarCtx.fillStyle = '#6688aa';
             for (const ast of asteroids) {
@@ -678,7 +798,8 @@ export const App: React.FC = () => {
         if (deg < 0) deg += 360;
 
         let thrustStatus: TelemetryData['thrustStatus'] = 'IDLE (DRIFT)';
-        if (player.isDead) thrustStatus = 'OFFLINE';
+        if (isDockedRef.current) thrustStatus = 'DOCKED [STATION]';
+        else if (player.isDead) thrustStatus = 'OFFLINE';
         else if (keys.forward) thrustStatus = 'FORWARD [100%]';
         else if (keys.reverse) thrustStatus = 'REVERSE [RCS]';
 
@@ -745,6 +866,14 @@ export const App: React.FC = () => {
         onRestartGame={handleRestartGame}
         onKeyDownAction={handleKeyDownAction}
         onKeyUpAction={handleKeyUpAction}
+      />
+
+      {/* Orbital Base Station Docking Concourse Terminal */}
+      <StationModal
+        isOpen={isDocked}
+        onUndock={handleUndock}
+        soundEngine={soundEngineRef.current}
+        stationName={baseStationRef.current.name}
       />
     </div>
   );
