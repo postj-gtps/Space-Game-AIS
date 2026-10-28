@@ -1,6 +1,6 @@
-# Hostile Combat Drone Implementation Plan
+# Orbital Base Station & Docking System Implementation Plan
 
-Introduce a new hostile combat drone enemy type with procedural circular patrol mechanics, 12 o'clock turn-decision routing, corner-mounted 45° plasma cannon turrets, and safe-approach flight corridors.
+Integrate the large 10x Base Station asset (`Base Station.png`) into deep space, implement contact-based docking collision mechanics, and build an authentic sci-fi docking terminal interface with station facilities and safe undocking clearance.
 
 ---
 
@@ -8,95 +8,120 @@ Introduce a new hostile combat drone enemy type with procedural circular patrol 
 
 > [!IMPORTANT]
 > **Summary of Confirmed Choices from User Clarification:**
-> - **45° Turret Arc Orientation**: Firing arcs are centered along the 4 outward corner diagonals ($\pm 45^\circ$, $\pm 135^\circ$), creating 4 distinct 45-degree safe blind spots along the cardinal axes (front, aft, port, starboard) for skillful player positioning.
-> - **Sector Deployment**: Hostile Drones will coexist with existing target practice drones and asteroids throughout the sector.
-> - **Durability & Stats**: Light drone combat tier (3 unshielded direct hits to destroy, matching target drones with explosive destruction and sound effects).
-> - **Sprite Asset**: Utilizing `Hostile Drone.png` (mapped from the high-detail combat drone sprite) with fallback redundancy.
+> - **Station Location**: Positioned near the sector center at `(0, 350)` with the player spawning clear of the station perimeter at `(0, 0)` facing space.
+> - **Undock Clearance**: Selecting "Leave Station" disengages clamps and places the player outside the station's perimeter with a 3-second collision grace period to prevent immediate re-docking loops.
+> - **Dead-End Facility Screens**: Selecting "Ship Dealer", "Visit the Bar", "Mission Computer", or "Merchants' Hall" opens dedicated interior terminal screens clearly marked "Under Construction / Renovation in Progress" with atmospheric facility descriptions and a functional "Back to Concourse" action.
+> - **Visual Scale**: Sized at 10x the player ship dimensions (~880px visual footprint, ~400px docking radius) with smooth slow rotation and distinct radar navigational blips.
 
 ---
 
 ### 1. Overview & Core Concept
 
-- **The Hostile Drone**: An autonomous combat sentry unit (`HostileDrone`) that patrols deep space in procedural circular loops.
-- **Dynamic 12 O'Clock Navigation**: Each time the drone reaches the 12 o'clock position (the northernmost apex of its current orbital path), it executes a branch decision:
-  1. Randomly selects a new patrol diameter ($D \in [300, 800]$ units).
-  2. Randomly chooses whether to circle to the left (counter-clockwise) or right (clockwise) for its next patrol orbit.
-- **Corner Plasma Cannons**: Equipped with 4 plasma weapon mounts situated at its structural corner pylons. Each turret independently monitors player position:
-  - If the player enters within weapon range and inside the turret's 45° field of fire ($[-22.5^\circ, +22.5^\circ]$ relative to the pylon diagonal), it fires plasma projectiles identical to the player's weapon.
-  - Between the turrets lie four 45° safe approach corridors where no turret can track or fire, rewarding tactical maneuvering and flanking.
+- **The Orbital Base Station**: A colossal deep-space outpost rendered using `/Potential Assets/Base Station.png`. Serving as the primary civilization hub in the sector, it rotates majestically in deep space.
+- **Proximity & Contact Docking**: When the player flies into contact with the base station hull, docking clamps engage: ship velocity is dampened to zero, weapons and thrust are safely locked, and the Station Concourse Terminal opens over the viewport.
+- **Docking Concourse Terminal**:
+  1. **Ship Dealer**: Concourse wing for purchasing, upgrading, and viewing starships (Under Construction preview).
+  2. **Visit the Bar**: The "Starlight Cantina" - rumors, crew hiring, and local news (Under Construction preview).
+  3. **Mission Computer**: Bounty hunting, patrol contracts, and courier manifests (Under Construction preview).
+  4. **Merchants' Hall**: Cargo trading, ore exchange, and market commodities (Under Construction preview).
+  5. **Leave Station**: Clamps release, engine power restored, and the ship is safely positioned clear of the station hull.
 
 ---
 
 ### 2. User Experience & Visual Design
 
-- **Visual Asset**: Distinctive combat drone sprite (`Hostile Drone.png` / `enemy-drone.png`) featuring armored blast plating, crimson combat markings, and four corner plasma mounts.
-- **Visual Weapon Feedback**:
-  - Subtle targeting laser or energy charging corona when a player is within a turret's 45° firing cone.
-  - Plasma bolts identical in speed, particle trail, and acoustic pitch to player plasma cannons.
-  - Corner muzzle flashes with blue/cyan spark bursts upon firing.
-- **Tactical Radar Representation**: Distinct aggressive crimson blip (`#ff1144` or diamond crosshair) on the radar display, visually differentiating hostile combat drones from neutral target drones (`#ff3366` circles) and asteroids (`#6688aa`).
-- **Safe Zone Visualization**: The four 45° dead zones naturally emerge from the geometric limits of the corner turrets, giving observant pilots clear windows to line up shots without taking damage.
+- **Scale & Spatial Presence**:
+  - The base station is rendered at 10x the player ship size, dwarfs nearby asteroids and drones, and provides a true sense of scale in the sector.
+  - A subtle slow rotational drift ($0.001\text{ rad/s}$) gives the station kinetic presence without disorienting docking pilots.
+- **Docking Transition**:
+  - Upon touching the station radius, docking clamp audio / chime triggers, shields immediately begin slow auxiliary replenishment (station shore power), and the UI seamlessly reveals the station interface.
+- **Station Concourse UI Aesthetic**:
+  - Designed with clean sci-fi industrial aesthetic conforming to 60-30-10 color discipline: deep slate/void canvas (`#070d18`), structural steel borders (`rgba(0, 240, 255, 0.2)`), and high-contrast telemetry cyan/amber accents.
+  - Authentic station status readout: Station Designation (`OUTPOST EPSILON-7`), Sector Grid Coordinates, Docking Bay (`BAY 04`), and Port Authorities Status.
+  - Clear single-line facility navigation cards with crisp typography, hover states, and hotkey indicators (`1` through `5`).
+- **Tactical Radar Representation**:
+  - Distinct large hexagonal/circular station icon on the radar minimap with a pulsating beacon ring, allowing players to navigate back to base from anywhere in the sector.
 
 ---
 
 ### 3. Key Product Decisions & Trade-Offs
 
-- **Decision 1: Continuous Tangent 12 O'Clock Decision Logic**
-  - *Chosen Approach*: When crossing the 12 o'clock apex ($\theta \approx -\pi/2$ or passing the top horizontal tangent), the drone initiates its next circle tangent to its current heading, selecting a random radius and direction (left vs right).
-  - *Why*: Prevents jarring coordinate snaps while faithfully executing the requested circular patrol logic.
-- **Decision 2: Independent 4-Turret Arc Checks**
-  - *Chosen Approach*: Each corner turret evaluates whether the angle vector to the player falls within its $45^\circ$ cone ($\pm 22.5^\circ$ from the corner diagonal). A cooldown timer per turret prevents bullet spam and maintains fair combat rhythm.
-  - *Why*: Allows simultaneous multi-barrel firing if the player straddles an edge, while strictly enforcing the 45-degree dead zones.
-- **Decision 3: Enemy Projectile Layer & Player Damage**
-  - *Chosen Approach*: Extend the existing projectile pipeline with an `isEnemy` flag so hostile plasma bolts collide with the player ship (depleting shields and triggering camera shake) while player bolts collide with hostile drones.
-  - *Why*: Reuses tested particle and projectile physics with zero overhead.
+- **Decision 1: Asset Pipeline & Preloading**
+  - *Chosen Approach*: Copy `Base Station.png` from `/Potential Assets/` to both `/public/assets/images/stations/Base Station.png` and `/assets/images/stations/Base Station.png`. Preload inside `AssetManager` with error fallback to vector graphics.
+  - *Why*: Guarantees immediate loading in dev server and production builds without missing asset errors.
+- **Decision 2: Safe Undocking Buffer & Grace Period**
+  - *Chosen Approach*: When clicking "Leave Station", the ship is positioned just outside the station's collision boundary along the vector pointing away from station center, with velocity set to an outward drift ($1.5\text{ units/frame}$) and a 3-second docking invulnerability timer.
+  - *Why*: Completely eliminates the frustrating bug where a player immediately re-docks the moment they exit.
+- **Decision 3: Dedicated Interior Terminal Sub-views**
+  - *Chosen Approach*: Keep station modal state within a clean sub-route state machine (`'CONCOURSE' | 'SHIP_DEALER' | 'BAR' | 'MISSION_COMPUTER' | 'MERCHANTS_HALL'`). Each facility displays bespoke thematic descriptions and a "Return to Concourse" button.
+  - *Why*: Satisfies the user's dead-end requirement cleanly while building the exact architecture ready for future feature expansion.
 
 ---
 
-### 4. Technical Architecture & Component Structure
+### 4. Technical Architecture & Data Strategy
 
 ```
 ┌────────────────────────────────────────────────────────┐
 │                   src/game/assets.ts                   │
-│  - Preloads 'Hostile Drone.png' with bundled fallbacks │
-│  - Exposes AssetManager.getHostileDroneImage()         │
+│  - Preloads 'Base Station.png'                         │
+│  - Exposes AssetManager.getBaseStationImage()          │
 └───────────────────────────┬────────────────────────────┘
                             │
                             ▼
 ┌────────────────────────────────────────────────────────┐
 │                   src/game/engine.ts                   │
-│  - HostileDrone class:                                 │
-│      * Circular patrol kinematics (cx, cy, R, dir, ω)  │
-│      * 12 o'clock waypoint detection & reroute logic   │
-│      * 4 Corner turrets at [45°, 135°, 225°, 315°]     │
-│      * 45° Firing cone evaluation & cooldown timers     │
-│  - LaserProjectile:                                    │
-│      * isEnemy: boolean (damages player vs enemies)    │
-│  - Player collision & damage handling for enemy shots  │
+│  - BaseStation entity class:                           │
+│      * Position (0, 350), visual radius ~420px         │
+│      * Slow rotational drift (draw & transform)        │
+│      * Docking contact detection against PlayerShip    │
+│  - PlayerShip docking state & undock grace cooldown    │
 └───────────────────────────┬────────────────────────────┘
                             │
                             ▼
 ┌────────────────────────────────────────────────────────┐
 │                      src/App.tsx                       │
-│  - Spawns HostileDrone instances alongside asteroids   │
-│  - Game loop updates & draws hostile drones            │
-│  - Projectile collision checks (Hostile vs Player)     │
-│  - Radar minimap rendering with distinct hostile icon  │
+│  - Base station update & render in world space         │
+│  - Station blip on radar minimap                       │
+│  - Docking collision trigger -> setDocked(true)        │
+│  - Undock handler -> setDocked(false) & reposition     │
+└───────────────────────────┬────────────────────────────┘
+                            │
+                            ▼
+┌────────────────────────────────────────────────────────┐
+│             src/components/StationModal.tsx            │
+│  - Atmospheric Concourse UI with 5 facility options    │
+│  - Sub-views for Dealer, Bar, Missions, Merchants      │
+│  - Keyboard shortcuts (1-5, Esc to back/leave)         │
 └────────────────────────────────────────────────────────┘
 ```
 
-### Steps to Implement
+#### State & Interaction Flow
 
-1. **Asset Pipeline (`src/game/assets.ts`)**:
-   - Ensure `Hostile Drone.png` is placed in both `assets/images/enemies/` and `public/assets/images/enemies/`.
-   - Update `AssetManager` to preload the hostile drone texture with dynamic base URL resolution and fallback support.
-2. **Kinematics & Turrets (`src/game/engine.ts`)**:
-   - Implement the `HostileDrone` class with circular orbital math, 12 o'clock apex detection, left/right direction flip, and random radius generation.
-   - Define the 4 corner weapon pylons ($(\pm 22, \pm 22)$ local space), calculate relative player angles, and constrain firing to 45° cones.
-   - Update `LaserProjectile` to support hostile laser bolts and handle collisions against player shields/hull.
-3. **Game Loop & Radar Integration (`src/App.tsx`)**:
-   - Initialize hostile combat drones in the sector alongside existing target drones.
-   - Integrate hostile drones into projectile updates, collision sweeps, and respawn loops.
-   - Render hostile combat drones with custom radar signatures on the tactical HUD minimap.
-4. **Verification & Build**:
-   - Run `compile_applet` and test all circular path transitions, turret firing cones, and damage mechanics.
+1. **Space Flight**: Player pilots ship across sector. Radar shows station icon at `(0, 350)`.
+2. **Contact Trigger**: `hypot(player.x - station.x, player.y - station.y) <= player.radius + station.radius`.
+   - If `dockingGraceTimer <= 0`: trigger dock event.
+   - Halt player ship: `vx = 0, vy = 0`.
+   - Set `isDocked = true`.
+3. **Station Terminal Opened**:
+   - Keyboard navigation enabled (`1-5`, `Esc`).
+   - Clicking options 1-4 navigates to facility sub-view with "Under Construction" banner and back action.
+   - Clicking option 5 "Leave Station" calls `onUndock()`.
+4. **Undocking**:
+   - `isDocked = false`.
+   - Player position moved to `station.x + cos(angle) * (station.radius + 60)`.
+   - Ship velocity directed outward at speed `2.0`.
+   - `dockingGraceTimer = 3.0` seconds.
+
+---
+
+### Verification Plan
+
+1. **Compilation Check**: Run `compile_applet` to verify TypeScript builds without errors.
+2. **Visual Inspection**:
+   - Verify the Base Station renders at 10x ship scale at `(0, 350)`.
+   - Verify station slowly rotates and appears on the radar minimap.
+3. **Docking Test**:
+   - Fly ship into the base station.
+   - Confirm docking terminal modal pops up and ship controls are paused.
+   - Click "Ship Dealer", "Visit the Bar", "Mission Computer", "Merchants' Hall" — verify under-construction screens with "Back" button.
+   - Click "Leave Station" — verify ship emerges safely outside station facing outward without re-docking.

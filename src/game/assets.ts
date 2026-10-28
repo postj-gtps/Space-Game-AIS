@@ -2,6 +2,7 @@ import { ShipsCatalog, ShipDefinition } from '../types/game';
 import defaultShipStarterImg from '../../assets/images/ships/ship-starter.png';
 import defaultEnemyDroneImg from '../../assets/images/enemies/Enemy Drone.png';
 import defaultHostileDroneImg from '../../assets/images/enemies/Hostile Drone.png';
+import defaultBaseStationImg from '../../assets/images/stations/Base Station.png';
 
 export function resolveAssetPath(path: string): string {
   if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
@@ -18,6 +19,7 @@ export class AssetManager {
   public static loadedImages: Record<string, HTMLImageElement> = {};
   public static droneImage: HTMLImageElement | null = null;
   public static hostileDroneImage: HTMLImageElement | null = null;
+  public static baseStationImage: HTMLImageElement | null = null;
   public static isReady = false;
 
   public static fallbackCatalog: ShipsCatalog = {
@@ -172,6 +174,28 @@ export class AssetManager {
       })
     );
 
+    // Preload Base Station sprite
+    const stationImg = new Image();
+    const primaryStationSrc = resolveAssetPath('assets/images/stations/Base Station.png');
+    stationImg.src = primaryStationSrc;
+    this.baseStationImage = stationImg;
+
+    loadPromises.push(
+      new Promise((resolve) => {
+        stationImg.onload = () => resolve();
+        stationImg.onerror = () => {
+          console.warn(`Primary station texture failed at ${primaryStationSrc}. Attempting fallback.`);
+          stationImg.src = defaultBaseStationImg;
+          stationImg.onload = () => resolve();
+          stationImg.onerror = () => {
+            stationImg.src = './assets/images/stations/Base%20Station.png';
+            stationImg.onload = () => resolve();
+            stationImg.onerror = () => resolve();
+          };
+        };
+      })
+    );
+
     await Promise.all(loadPromises);
     this.isReady = true;
   }
@@ -190,5 +214,9 @@ export class AssetManager {
 
   public static getHostileDroneImage(): HTMLImageElement | null {
     return this.hostileDroneImage;
+  }
+
+  public static getBaseStationImage(): HTMLImageElement | null {
+    return this.baseStationImage;
   }
 }
