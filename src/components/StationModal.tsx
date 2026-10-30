@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { SoundEngine } from '../game/sound';
+import { AssetManager } from '../game/assets';
 import defaultShipStarterImg from '../../assets/images/ships/ship-starter.png';
 import defaultFreighterImg from '../../assets/images/ships/Freighter.png';
 
@@ -463,6 +464,23 @@ export const StationModal: React.FC<StationModalProps> = ({
                 {/* Starship Showroom Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                   {SHOWROOM_SHIPS.map((ship, idx) => {
+                    const liveShip = AssetManager.getShip(ship.id);
+                    const liveStats = liveShip?.stats;
+                    const topSpeedDisplay = liveStats
+                      ? `${liveStats.maxSpeed} kn (${(liveStats.maxSpeed * 15).toFixed(1)} kn)`
+                      : ship.stats.topSpeed;
+                    const thrustDisplay = liveStats
+                      ? `${liveStats.thrustPower} Drive`
+                      : ship.stats.thrust;
+                    const shieldsDisplay = liveStats?.maxShields ?? ship.stats.shields;
+                    const hullDisplay = liveStats?.maxHull ?? ship.stats.hull;
+                    const cargoDisplay = liveStats?.cargoCapacity ?? ship.stats.cargo;
+                    const crewDisplay = liveStats?.crewCapacity ?? ship.stats.crew;
+                    const costDisplay = liveStats?.cost ?? ship.stats.cost;
+                    const laserCycleDisplay = liveStats?.laserCooldown
+                      ? `${liveStats.laserCooldown} ms`
+                      : ship.stats.laserCycle;
+
                     const isEquipped =
                       activeShipId === ship.id ||
                       (ship.id === 'starter_ship' && (activeShipId === 'scout_01' || activeShipId === 'scout')) ||
@@ -485,7 +503,7 @@ export const StationModal: React.FC<StationModalProps> = ({
                                 <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300">
                                   KEY [{idx + 1}]
                                 </span>
-                                <h3 className="text-base font-bold text-white">{ship.name}</h3>
+                                <h3 className="text-base font-bold text-white">{liveShip?.name || ship.name}</h3>
                               </div>
                               <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-semibold block mt-0.5">
                                 {ship.role}
@@ -497,7 +515,7 @@ export const StationModal: React.FC<StationModalProps> = ({
                               </span>
                             ) : (
                               <span className="text-[10px] font-mono text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded">
-                                {ship.stats.cost === 0 ? 'FREE REQUISITION' : `${ship.stats.cost.toLocaleString()} Cr`}
+                                {costDisplay === 0 ? 'FREE REQUISITION' : `${costDisplay.toLocaleString()} Cr`}
                               </span>
                             )}
                           </div>
@@ -518,34 +536,34 @@ export const StationModal: React.FC<StationModalProps> = ({
                           </div>
 
                           <p className="text-xs text-slate-300 leading-relaxed mb-3 line-clamp-2">
-                            {ship.description}
+                            {liveShip?.description || ship.description}
                           </p>
 
                           {/* Key Technical Specifications Grid */}
                           <div className="grid grid-cols-3 gap-1.5 p-2.5 rounded bg-slate-950/70 border border-slate-800/80 text-[11px] font-mono mb-3">
                             <div className="flex flex-col">
                               <span className="text-slate-500 text-[9px]">MAX SPEED</span>
-                              <span className="text-cyan-300 font-bold">{ship.stats.topSpeed}</span>
+                              <span className="text-cyan-300 font-bold">{topSpeedDisplay}</span>
                             </div>
                             <div className="flex flex-col">
                               <span className="text-slate-500 text-[9px]">SHIELDS / HULL</span>
-                              <span className="text-emerald-400 font-bold">{ship.stats.shields} / {ship.stats.hull}</span>
+                              <span className="text-emerald-400 font-bold">{shieldsDisplay} / {hullDisplay}</span>
                             </div>
                             <div className="flex flex-col">
                               <span className="text-slate-500 text-[9px]">CARGO HOLD</span>
-                              <span className="text-amber-300 font-bold">{ship.stats.cargo} SCU</span>
+                              <span className="text-amber-300 font-bold">{cargoDisplay} SCU</span>
                             </div>
                             <div className="flex flex-col">
                               <span className="text-slate-500 text-[9px]">CREW CAPACITY</span>
-                              <span className="text-slate-200">{ship.stats.crew} Personnel</span>
+                              <span className="text-slate-200">{crewDisplay} Personnel</span>
                             </div>
                             <div className="flex flex-col">
                               <span className="text-slate-500 text-[9px]">THRUST SYSTEM</span>
-                              <span className="text-cyan-300">{ship.stats.thrust}</span>
+                              <span className="text-cyan-300">{thrustDisplay}</span>
                             </div>
                             <div className="flex flex-col">
                               <span className="text-slate-500 text-[9px]">LASER CYCLE</span>
-                              <span className="text-purple-300">{ship.stats.laserCycle}</span>
+                              <span className="text-purple-300">{laserCycleDisplay}</span>
                             </div>
                           </div>
                         </div>
