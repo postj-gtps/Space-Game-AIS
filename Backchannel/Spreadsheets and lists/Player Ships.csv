@@ -1,2 +1,3 @@
 id,name,description,startingWeapons,sprite.src,sprite.scale,stats.maxSpeed,stats.thrustPower,stats.reverseThrustPower,stats.rotationSpeed,stats.maxHull,stats.maxShields,stats.laserCooldown,stats.laserHeatLimit,stats.collisionRadius,stats.cost,stats.crewCapacity,stats.cargoCapacity,anchors.muzzles,anchors.thrusters
 scout_01,Starlight Scout,Balanced starter vessel equipped with light weaponry.,"laser_cannon_1, pulse_laser",/assets/ships/scout.png,1,350,450,200,180,100,150,0.15,100,24,0,2,25,"{""x"": 0, ""y"": -15}","{""x"": 0, ""y"": 15}"
+freighter_01,Scipia,Light weapons but increased Payload. ,"weak_laser_cannon_1, pulse_laser",,2,350,350,150,100,115,200,0.1725,100,40,30,4,50,"{""x"": 0, ""y"": -20}","{""x"": 0, ""y"": 35}"
