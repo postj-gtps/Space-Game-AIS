@@ -20,6 +20,9 @@ export interface ShipStats {
   laserCooldown: number;
   laserHeatLimit: number;
   collisionRadius: number;
+  cost: number;
+  crewCapacity: number;
+  cargoCapacity: number;
 }
 
 export interface ShipAnchors {
@@ -32,6 +35,7 @@ export interface ShipDefinition {
   id: string;
   name: string;
   description: string;
+  startingWeapons: string[];
   sprite: ShipSpriteConfig;
   stats: ShipStats;
   anchors: ShipAnchors;

@@ -37,6 +37,7 @@ export class AssetManager {
       name: 'SF-77 Vanguard',
       description:
         'Standard issue heavy fighter equipped with dual wing-mounted plasma cannons and tri-jet sublight thrusters.',
+      startingWeapons: ['Dual Wing-Mounted Plasma Cannons'],
       sprite: {
         src: defaultShipStarterImg,
         scale: 0.11,
@@ -52,6 +53,9 @@ export class AssetManager {
         laserCooldown: 110,
         laserHeatLimit: 100,
         collisionRadius: 44,
+        cost: 25000,
+        crewCapacity: 1,
+        cargoCapacity: 15,
       },
       anchors: {
         muzzles: [
