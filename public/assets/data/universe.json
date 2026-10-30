@@ -1,0 +1,191 @@
+{
+  "defaultLocation": {
+    "sectorId": "sector_terran",
+    "systemId": "system_valiant",
+    "bubbleId": "bubble_valiant_prime"
+  },
+  "sectors": {
+    "sector_terran": {
+      "id": "sector_terran",
+      "name": "Terran Frontier Sector",
+      "description": "Outer rim territory administered by the Sol Defense Coalition and frontier trading guilds.",
+      "systems": {
+        "system_valiant": {
+          "id": "system_valiant",
+          "name": "Valiant Star System",
+          "sectorId": "sector_terran",
+          "description": "A strategic border system with active trade routes, automated defense grids, and mineral-rich asteroid bands.",
+          "starType": "G-Type Main Sequence",
+          "navigationGraph": [
+            {
+              "id": "nav_valiant_to_belt",
+              "fromNodeId": "bubble_valiant_prime",
+              "toNodeId": "bubble_caelum_belt",
+              "distanceAu": 1.8,
+              "travelTimeSec": 12,
+              "hazardRating": 2,
+              "description": "Direct transit corridor to primary iron/nickel mining concessions."
+            },
+            {
+              "id": "nav_valiant_to_gate",
+              "fromNodeId": "bubble_valiant_prime",
+              "toNodeId": "bubble_ares_gate",
+              "distanceAu": 3.4,
+              "travelTimeSec": 20,
+              "hazardRating": 1,
+              "description": "High-security patrol route toward the interstellar jump nexus."
+            },
+            {
+              "id": "nav_belt_to_gate",
+              "fromNodeId": "bubble_caelum_belt",
+              "toNodeId": "bubble_ares_gate",
+              "distanceAu": 2.2,
+              "travelTimeSec": 15,
+              "hazardRating": 3,
+              "description": "Sparse pirate territory linking outer ore fields to the jump corridor."
+            }
+          ],
+          "nodes": {
+            "bubble_valiant_prime": {
+              "id": "bubble_valiant_prime",
+              "name": "Starport Valiant-Prime Orbital Hub",
+              "systemId": "system_valiant",
+              "designation": "SECTOR 0-A // ORBITAL STATION",
+              "description": "Heavy orbital logistics hub servicing commercial freighters, scout squadrons, and deep-space patrols.",
+              "worldSize": 100000,
+              "spawnPosition": {
+                "x": 0,
+                "y": 350,
+                "angle": -1.57079632679
+              },
+              "staticEntities": [
+                {
+                  "id": "station_valiant_prime",
+                  "name": "STARPORT VALIANT-PRIME",
+                  "category": "station",
+                  "designation": "SECTOR 0-A // ORBITAL STATION",
+                  "x": 0,
+                  "y": 350,
+                  "radius": 430,
+                  "scale": 1.33,
+                  "rotSpeed": 0.0006,
+                  "interactionType": "dock",
+                  "interactionRadius": 430
+                }
+              ],
+              "dynamicSpawns": [
+                {
+                  "category": "asteroid",
+                  "count": 45,
+                  "spawnRadiusMin": 300,
+                  "spawnRadiusMax": 4600,
+                  "respawnRateSec": 10
+                },
+                {
+                  "category": "target_drone",
+                  "count": 8,
+                  "spawnRadiusMin": 400,
+                  "spawnRadiusMax": 2000,
+                  "respawnRateSec": 4
+                },
+                {
+                  "category": "hostile_drone",
+                  "count": 6,
+                  "spawnRadiusMin": 600,
+                  "spawnRadiusMax": 2200,
+                  "respawnRateSec": 5
+                }
+              ]
+            },
+            "bubble_caelum_belt": {
+              "id": "bubble_caelum_belt",
+              "name": "Caelum Asteroid Extraction Zone",
+              "systemId": "system_valiant",
+              "designation": "MINING CONCESSION B-7",
+              "description": "Dense field of crystalline and metallic asteroids frequented by automated extraction rigs.",
+              "worldSize": 100000,
+              "spawnPosition": {
+                "x": -1200,
+                "y": 800,
+                "angle": 0
+              },
+              "staticEntities": [
+                {
+                  "id": "beacon_ore_refinery",
+                  "name": "CAELUM REFINERY PLATFORM",
+                  "category": "station",
+                  "designation": "ORE EXTRACTION DEPOT",
+                  "x": -1200,
+                  "y": 800,
+                  "radius": 350,
+                  "scale": 1.1,
+                  "rotSpeed": 0.0004,
+                  "interactionType": "dock",
+                  "interactionRadius": 350
+                }
+              ],
+              "dynamicSpawns": [
+                {
+                  "category": "asteroid",
+                  "count": 75,
+                  "spawnRadiusMin": 250,
+                  "spawnRadiusMax": 5500
+                },
+                {
+                  "category": "hostile_drone",
+                  "count": 8,
+                  "spawnRadiusMin": 500,
+                  "spawnRadiusMax": 2500
+                }
+              ]
+            },
+            "bubble_ares_gate": {
+              "id": "bubble_ares_gate",
+              "name": "Ares Waypoint & Jump Gate",
+              "systemId": "system_valiant",
+              "designation": "INTERSTELLAR RELAY 04",
+              "description": "Hyperspace jump conduit linking the Valiant System to adjacent core worlds.",
+              "worldSize": 100000,
+              "spawnPosition": {
+                "x": 0,
+                "y": 0,
+                "angle": 0
+              },
+              "staticEntities": [
+                {
+                  "id": "jump_gate_centauri",
+                  "name": "JUMP GATE CENTAURI-A",
+                  "category": "jump_gate",
+                  "designation": "CORRIDOR ALPHA-9",
+                  "x": 0,
+                  "y": -600,
+                  "radius": 380,
+                  "scale": 1.2,
+                  "rotSpeed": 0.001,
+                  "interactionType": "jump",
+                  "interactionRadius": 380,
+                  "targetSystemId": "system_centauri",
+                  "targetBubbleId": "bubble_centauri_gate"
+                }
+              ],
+              "dynamicSpawns": [
+                {
+                  "category": "asteroid",
+                  "count": 20,
+                  "spawnRadiusMin": 800,
+                  "spawnRadiusMax": 4500
+                },
+                {
+                  "category": "target_drone",
+                  "count": 10,
+                  "spawnRadiusMin": 300,
+                  "spawnRadiusMax": 2000
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

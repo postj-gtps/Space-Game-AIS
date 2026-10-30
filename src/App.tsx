@@ -15,7 +15,10 @@ import {
   NebulaRenderer,
   drawSectorGrid,
   InputState,
+  ActiveBubbleSession,
 } from './game/engine';
+import { UniverseManager } from './data/universeData';
+import { CurrentLocationState } from './types/universe';
 import { HUD } from './components/HUD';
 import { StationModal } from './components/StationModal';
 
@@ -47,12 +50,19 @@ export const App: React.FC = () => {
   const [isDocked, setIsDocked] = useState(true);
   const isDockedRef = useRef(true);
 
+  // Active Galactic Spatial Hierarchy Location
+  const [currentLocation, setCurrentLocation] = useState<CurrentLocationState>(() =>
+    UniverseManager.getCurrentLocationState()
+  );
+  const activeBubble = UniverseManager.getActiveBubble();
+
   // Keep references to game engine instances
   const soundEngineRef = useRef<SoundEngine>(new SoundEngine());
-  const playerRef = useRef<PlayerShip>(new PlayerShip(0, 350));
+  const playerRef = useRef<PlayerShip>(new PlayerShip(activeBubble.spawnPosition.x, activeBubble.spawnPosition.y));
   const baseStationRef = useRef<BaseStation>(new BaseStation(0, 350));
+  const bubbleSessionRef = useRef<ActiveBubbleSession>(new ActiveBubbleSession(activeBubble, playerRef.current));
   const starfieldRef = useRef<Starfield>(new Starfield(350));
-  const nebulaRef = useRef<NebulaRenderer>(new NebulaRenderer());
+  const nebulaRef = useRef<NebulaRenderer>(new NebulaRenderer(activeBubble.nebulae));
   const particleSystemRef = useRef<ParticleSystem>(new ParticleSystem());
   const projectilesRef = useRef<LaserProjectile[]>([]);
   const asteroidsRef = useRef<Asteroid[]>([]);
@@ -249,33 +259,18 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  // Initialize Asteroids and Target Drones
+  // Initialize Entities from Active Map Bubble (Micro Space)
   useEffect(() => {
-    const astList: Asteroid[] = [];
-    for (let i = 0; i < CONFIG.maxAsteroids; i++) {
-      const dist = 300 + Math.random() * (CONFIG.worldSize / 2 - 400);
-      const angle = Math.random() * Math.PI * 2;
-      const size = Math.floor(Math.random() * 3) + 1;
-      const variant = Math.floor(Math.random() * 4);
-      astList.push(new Asteroid(Math.cos(angle) * dist, Math.sin(angle) * dist, size, variant));
-    }
-    asteroidsRef.current = astList;
+    const bubble = UniverseManager.getActiveBubble();
+    const session = bubbleSessionRef.current;
+    session.loadFromBubble(bubble, false);
 
-    const droneList: TargetDrone[] = [];
-    for (let i = 0; i < CONFIG.maxDrones; i++) {
-      const dist = 400 + Math.random() * 2000;
-      const angle = Math.random() * Math.PI * 2;
-      droneList.push(new TargetDrone(Math.cos(angle) * dist, Math.sin(angle) * dist));
-    }
-    dronesRef.current = droneList;
-
-    const hostileList: HostileDrone[] = [];
-    for (let i = 0; i < (CONFIG.maxHostileDrones || 6); i++) {
-      const dist = 600 + Math.random() * 2200;
-      const angle = Math.random() * Math.PI * 2;
-      hostileList.push(new HostileDrone(Math.cos(angle) * dist, Math.sin(angle) * dist));
-    }
-    hostileDronesRef.current = hostileList;
+    asteroidsRef.current = session.asteroids;
+    dronesRef.current = session.drones;
+    hostileDronesRef.current = session.hostileDrones;
+    baseStationRef.current = session.baseStation;
+    projectilesRef.current = session.projectiles;
+    setCurrentLocation(UniverseManager.getCurrentLocationState());
   }, []);
 
   // Window resize & keyboard listeners
@@ -374,9 +369,19 @@ export const App: React.FC = () => {
 
     const initCatalogAndStart = async () => {
       await AssetManager.init();
+      const activeBubble = UniverseManager.getActiveBubble();
+      bubbleSessionRef.current.loadFromBubble(activeBubble, false);
+      asteroidsRef.current = bubbleSessionRef.current.asteroids;
+      dronesRef.current = bubbleSessionRef.current.drones;
+      hostileDronesRef.current = bubbleSessionRef.current.hostileDrones;
+      baseStationRef.current = bubbleSessionRef.current.baseStation;
+      projectilesRef.current = bubbleSessionRef.current.projectiles;
+      if (activeBubble.nebulae) {
+        nebulaRef.current.setClouds(activeBubble.nebulae);
+      }
       playerRef.current.reset();
-      playerRef.current.x = 0;
-      playerRef.current.y = 350;
+      playerRef.current.x = activeBubble.spawnPosition.x;
+      playerRef.current.y = activeBubble.spawnPosition.y;
 
       const loop = (currentTime: number) => {
         const deltaTime = (currentTime - lastTime) / 1000;

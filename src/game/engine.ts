@@ -1,9 +1,21 @@
 import { ShipDefinition, TelemetryData } from '../types/game';
+import {
+  IEntity,
+  IStaticEntity,
+  IDynamicEntity,
+  ITransientEntity,
+  MapBubble,
+  StaticEntityConfig,
+  DynamicSpawnRule,
+  InteractionType,
+  NebulaCloudConfig,
+  DEFAULT_MAP_BUBBLE_WORLD_SIZE,
+} from '../types/universe';
 import { AssetManager } from './assets';
 import { SoundEngine } from './sound';
 
 export const CONFIG = {
-  worldSize: 10000,
+  worldSize: 100000,
   drag: 0.994,
   laserSpeed: 20,
   maxAsteroids: 45,
@@ -136,7 +148,12 @@ export class ParticleSystem {
   }
 }
 
-export class LaserProjectile {
+export class LaserProjectile implements ITransientEntity {
+  public id: string;
+  public name = 'Laser Bolt';
+  public classification: 'transient' = 'transient';
+  public category: 'projectile' = 'projectile';
+  public active = true;
   public x: number;
   public y: number;
   public vx: number;
@@ -147,7 +164,8 @@ export class LaserProjectile {
   public radius = 3;
   public isEnemy = false;
 
-  constructor(x: number, y: number, vx: number, vy: number, angle: number, isEnemy = false) {
+  constructor(x: number, y: number, vx: number, vy: number, angle: number, isEnemy = false, id?: string) {
+    this.id = id || `proj_${Math.random().toString(36).substring(2, 9)}`;
     this.x = x;
     this.y = y;
     this.vx = vx;
@@ -191,7 +209,12 @@ export class LaserProjectile {
   }
 }
 
-export class Asteroid {
+export class Asteroid implements IDynamicEntity {
+  public id: string;
+  public name = 'Asteroid';
+  public classification: 'dynamic' = 'dynamic';
+  public category: 'asteroid' = 'asteroid';
+  public active = true;
   public x: number;
   public y: number;
   public size: number;
@@ -204,7 +227,8 @@ export class Asteroid {
   public numPoints: number;
   public offsets: number[];
 
-  constructor(x: number, y: number, size = 3, variantIndex?: number, vx?: number, vy?: number) {
+  constructor(x: number, y: number, size = 3, variantIndex?: number, vx?: number, vy?: number, id?: string) {
+    this.id = id || `ast_${Math.random().toString(36).substring(2, 9)}`;
     this.x = x;
     this.y = y;
     this.size = size;
@@ -273,7 +297,12 @@ export class Asteroid {
   }
 }
 
-export class TargetDrone {
+export class TargetDrone implements IDynamicEntity {
+  public id: string;
+  public name = 'Target Drone';
+  public classification: 'dynamic' = 'dynamic';
+  public category: 'target_drone' = 'target_drone';
+  public active = true;
   public x: number;
   public y: number;
   public vx: number;
@@ -281,8 +310,10 @@ export class TargetDrone {
   public radius = 24;
   public angle = 0;
   public hp = 3;
+  public maxHp = 3;
 
-  constructor(x: number, y: number) {
+  constructor(x: number, y: number, id?: string) {
+    this.id = id || `tdrone_${Math.random().toString(36).substring(2, 9)}`;
     this.x = x;
     this.y = y;
     this.vx = (Math.random() - 0.5) * 2;
@@ -354,7 +385,12 @@ export interface CornerCannon {
   cooldown: number;
 }
 
-export class HostileDrone {
+export class HostileDrone implements IDynamicEntity {
+  public id: string;
+  public name = 'Hostile Drone';
+  public classification: 'dynamic' = 'dynamic';
+  public category: 'hostile_drone' = 'hostile_drone';
+  public active = true;
   public x: number;
   public y: number;
   public vx = 0;
@@ -377,7 +413,8 @@ export class HostileDrone {
   // 4 Corner Plasma Cannons
   public cannons: CornerCannon[];
 
-  constructor(startX: number, startY: number) {
+  constructor(startX: number, startY: number, id?: string) {
+    this.id = id || `hdrone_${Math.random().toString(36).substring(2, 9)}`;
     this.x = startX;
     this.y = startY;
 
@@ -606,13 +643,22 @@ export class HostileDrone {
   }
 }
 
-export class PlayerShip {
+export class PlayerShip implements IDynamicEntity {
+  public id = 'player_ship';
+  public name = 'Starlight Scout';
+  public classification: 'dynamic' = 'dynamic';
+  public category: 'ship' = 'ship';
+  public active = true;
   public x: number;
   public y: number;
   public vx = 0;
   public vy = 0;
   public angle = -Math.PI / 2;
   public activeShipId = 'starter_ship';
+
+  public get radius(): number {
+    return this.config?.stats?.collisionRadius || 44;
+  }
 
   public lastShotTime = 0;
   public laserHeat = 0;
@@ -1207,11 +1253,23 @@ export class Starfield {
 }
 
 export class NebulaRenderer {
-  public clouds = [
+  public clouds: NebulaCloudConfig[] = [
     { x: -800, y: -600, radius: 900, color1: 'rgba(0, 100, 200, 0.12)', color2: 'rgba(0,0,0,0)' },
     { x: 1200, y: 800, radius: 1100, color1: 'rgba(150, 0, 200, 0.10)', color2: 'rgba(0,0,0,0)' },
     { x: 400, y: -1400, radius: 800, color1: 'rgba(0, 200, 150, 0.08)', color2: 'rgba(0,0,0,0)' },
   ];
+
+  constructor(initialClouds?: NebulaCloudConfig[]) {
+    if (initialClouds && initialClouds.length > 0) {
+      this.clouds = initialClouds;
+    }
+  }
+
+  public setClouds(clouds: NebulaCloudConfig[]): void {
+    if (clouds && clouds.length > 0) {
+      this.clouds = clouds;
+    }
+  }
 
   public draw(ctx: CanvasRenderingContext2D, showNebula: boolean): void {
     if (!showNebula) return;
@@ -1262,7 +1320,13 @@ export function drawSectorGrid(
   ctx.restore();
 }
 
-export class BaseStation {
+export class BaseStation implements IStaticEntity {
+  public id: string = 'station_valiant_prime';
+  public classification: 'static' = 'static';
+  public category: 'station' = 'station';
+  public active: boolean = true;
+  public interactionType: InteractionType = 'dock';
+  public interactionRadius: number = 430;
   public x: number;
   public y: number;
   public angle: number = 0;
@@ -1272,9 +1336,21 @@ export class BaseStation {
   public name: string = 'STARPORT VALIANT-PRIME';
   public designation: string = 'SECTOR 0-A // ORBITAL STATION';
 
-  constructor(x = 0, y = 350) {
+  constructor(x = 0, y = 350, config?: Partial<StaticEntityConfig>) {
     this.x = x;
     this.y = y;
+    if (config) {
+      if (config.id) this.id = config.id;
+      if (config.name) this.name = config.name;
+      if (config.designation) this.designation = config.designation;
+      if (config.radius !== undefined) {
+        this.radius = config.radius;
+        this.interactionRadius = config.radius;
+      }
+      if (config.scale !== undefined) this.scale = config.scale;
+      if (config.rotSpeed !== undefined) this.rotSpeed = config.rotSpeed;
+      if (config.interactionType) this.interactionType = config.interactionType;
+    }
   }
 
   public update(): void {
@@ -1348,6 +1424,127 @@ export class BaseStation {
     }
 
     ctx.restore();
+  }
+}
+
+/**
+ * Active Map Bubble Session Manager
+ * 
+ * Manages the playable 2D coordinate space (Micro Space) currently loaded in memory.
+ * Decouples entity lifecycles from hardcoded parameters by orchestrating static, dynamic,
+ * and transient entity arrays from declarative MapBubble and DynamicSpawnRule data.
+ */
+export class ActiveBubbleSession {
+  public bubble: MapBubble;
+  public staticEntities: IStaticEntity[] = [];
+  public dynamicEntities: IDynamicEntity[] = [];
+  public transientEntities: ITransientEntity[] = [];
+
+  // Direct typed collections
+  public baseStation: BaseStation;
+  public asteroids: Asteroid[] = [];
+  public drones: TargetDrone[] = [];
+  public hostileDrones: HostileDrone[] = [];
+  public projectiles: LaserProjectile[] = [];
+  public player: PlayerShip;
+
+  constructor(bubble: MapBubble, player?: PlayerShip) {
+    this.bubble = bubble;
+    this.player = player || new PlayerShip(bubble.spawnPosition.x, bubble.spawnPosition.y);
+    this.baseStation = new BaseStation(0, 350);
+    this.loadFromBubble(bubble, false);
+  }
+
+  /**
+   * Master entity array of all objects currently residing in the active Map Bubble.
+   */
+  public get activeEntities(): IEntity[] {
+    return [
+      ...this.staticEntities,
+      this.player,
+      ...this.dynamicEntities,
+      ...this.transientEntities,
+    ];
+  }
+
+  /**
+   * Unloads previous entities and dynamically loads the content defined by the target Map Bubble.
+   */
+  public loadFromBubble(bubble: MapBubble, resetPlayerPos = true): void {
+    this.bubble = bubble;
+    CONFIG.worldSize = bubble.worldSize || DEFAULT_MAP_BUBBLE_WORLD_SIZE;
+
+    this.staticEntities = [];
+    this.dynamicEntities = [];
+    this.transientEntities = [];
+    this.asteroids = [];
+    this.drones = [];
+    this.hostileDrones = [];
+    this.projectiles = [];
+
+    // 1. Static Entities instantiation from declarative configuration
+    for (const sCfg of bubble.staticEntities) {
+      const station = new BaseStation(sCfg.x, sCfg.y, sCfg);
+      this.baseStation = station;
+      this.staticEntities.push(station);
+    }
+    if (this.staticEntities.length === 0) {
+      this.baseStation = new BaseStation(0, 350);
+      this.staticEntities.push(this.baseStation);
+    }
+
+    // 2. Dynamic Entities instantiation based on declarative spawning rules
+    for (const rule of bubble.dynamicSpawns) {
+      if (rule.category === 'asteroid') {
+        for (let i = 0; i < rule.count; i++) {
+          const dist = rule.spawnRadiusMin + Math.random() * (rule.spawnRadiusMax - rule.spawnRadiusMin);
+          const angle = Math.random() * Math.PI * 2;
+          const size = Math.floor(Math.random() * 3) + 1;
+          const variant = Math.floor(Math.random() * 4);
+          const ast = new Asteroid(Math.cos(angle) * dist, Math.sin(angle) * dist, size, variant);
+          this.asteroids.push(ast);
+          this.dynamicEntities.push(ast);
+        }
+      } else if (rule.category === 'target_drone') {
+        for (let i = 0; i < rule.count; i++) {
+          const dist = rule.spawnRadiusMin + Math.random() * (rule.spawnRadiusMax - rule.spawnRadiusMin);
+          const angle = Math.random() * Math.PI * 2;
+          const td = new TargetDrone(Math.cos(angle) * dist, Math.sin(angle) * dist);
+          this.drones.push(td);
+          this.dynamicEntities.push(td);
+        }
+      } else if (rule.category === 'hostile_drone') {
+        for (let i = 0; i < rule.count; i++) {
+          const dist = rule.spawnRadiusMin + Math.random() * (rule.spawnRadiusMax - rule.spawnRadiusMin);
+          const angle = Math.random() * Math.PI * 2;
+          const hd = new HostileDrone(Math.cos(angle) * dist, Math.sin(angle) * dist);
+          this.hostileDrones.push(hd);
+          this.dynamicEntities.push(hd);
+        }
+      }
+    }
+
+    if (resetPlayerPos) {
+      this.player.x = bubble.spawnPosition.x;
+      this.player.y = bubble.spawnPosition.y;
+      if (bubble.spawnPosition.angle !== undefined) {
+        this.player.angle = bubble.spawnPosition.angle;
+      }
+    }
+  }
+
+  public registerTransient(proj: LaserProjectile): void {
+    this.projectiles.push(proj);
+    this.transientEntities.push(proj);
+  }
+
+  public removeTransient(index: number): void {
+    const proj = this.projectiles[index];
+    this.projectiles.splice(index, 1);
+    if (proj) {
+      const tIdx = this.transientEntities.indexOf(proj);
+      if (tIdx !== -1) this.transientEntities.splice(tIdx, 1);
+    }
   }
 }
 
