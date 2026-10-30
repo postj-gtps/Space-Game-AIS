@@ -1,5 +1,6 @@
 import { ShipsCatalog, ShipDefinition } from '../types/game';
 import defaultShipStarterImg from '../../assets/images/ships/ship-starter.png';
+import defaultFreighterImg from '../../assets/images/ships/Freighter.png';
 import defaultEnemyDroneImg from '../../assets/images/enemies/Enemy Drone.png';
 import defaultHostileDroneImg from '../../assets/images/enemies/Hostile Drone.png';
 import defaultBaseStationImg from '../../assets/images/stations/Base Station.png';
@@ -34,10 +35,10 @@ export class AssetManager {
   public static fallbackCatalog: ShipsCatalog = {
     starter_ship: {
       id: 'starter_ship',
-      name: 'SF-77 Vanguard',
+      name: 'Starlight Scout',
       description:
-        'Standard issue heavy fighter equipped with dual wing-mounted plasma cannons and tri-jet sublight thrusters.',
-      startingWeapons: ['Dual Wing-Mounted Plasma Cannons'],
+        'Balanced starter vessel equipped with light weaponry, dual wing-mounted plasma cannons, and tri-jet sublight thrusters.',
+      startingWeapons: ['laser_cannon_1', 'pulse_laser'],
       sprite: {
         src: defaultShipStarterImg,
         scale: 0.11,
@@ -53,9 +54,9 @@ export class AssetManager {
         laserCooldown: 110,
         laserHeatLimit: 100,
         collisionRadius: 44,
-        cost: 25000,
-        crewCapacity: 1,
-        cargoCapacity: 15,
+        cost: 0,
+        crewCapacity: 2,
+        cargoCapacity: 25,
       },
       anchors: {
         muzzles: [
@@ -70,6 +71,89 @@ export class AssetManager {
         rcsJets: [
           { x: 30, y: -28, color: '#ff9900' },
           { x: 30, y: 28, color: '#ff9900' },
+        ],
+      },
+    },
+    scout_01: {
+      id: 'scout_01',
+      name: 'Starlight Scout',
+      description:
+        'Balanced starter vessel equipped with light weaponry, dual wing-mounted plasma cannons, and tri-jet sublight thrusters.',
+      startingWeapons: ['laser_cannon_1', 'pulse_laser'],
+      sprite: {
+        src: defaultShipStarterImg,
+        scale: 0.11,
+        rotationOffset: 180,
+      },
+      stats: {
+        maxSpeed: 7,
+        thrustPower: 0.09,
+        reverseThrustPower: 0.05,
+        rotationSpeed: 0.0325,
+        maxShields: 100,
+        maxHull: 100,
+        laserCooldown: 110,
+        laserHeatLimit: 100,
+        collisionRadius: 44,
+        cost: 0,
+        crewCapacity: 2,
+        cargoCapacity: 25,
+      },
+      anchors: {
+        muzzles: [
+          { x: 56, y: -16 },
+          { x: 56, y: 16 },
+        ],
+        thrusters: [
+          { x: -44, y: -24, color: '#00f0ff' },
+          { x: -52, y: 0, color: '#00f0ff' },
+          { x: -44, y: 24, color: '#00f0ff' },
+        ],
+        rcsJets: [
+          { x: 30, y: -28, color: '#ff9900' },
+          { x: 30, y: 28, color: '#ff9900' },
+        ],
+      },
+    },
+    freighter_01: {
+      id: 'freighter_01',
+      name: 'Scipia Freighter',
+      description:
+        'Heavy industrial transport chassis featuring reinforced hull plating, high-capacity cargo holds, and twin heavy plasma sublight drives.',
+      startingWeapons: ['weak_laser_cannon_1', 'pulse_laser'],
+      sprite: {
+        src: defaultFreighterImg,
+        scale: 0.13,
+        rotationOffset: 90,
+      },
+      stats: {
+        maxSpeed: 6.2,
+        thrustPower: 0.07,
+        reverseThrustPower: 0.038,
+        rotationSpeed: 0.022,
+        maxShields: 135,
+        maxHull: 115,
+        laserCooldown: 130,
+        laserHeatLimit: 100,
+        collisionRadius: 50,
+        cost: 30000,
+        crewCapacity: 4,
+        cargoCapacity: 50,
+      },
+      anchors: {
+        muzzles: [
+          { x: 62, y: -15 },
+          { x: 62, y: 15 },
+        ],
+        thrusters: [
+          { x: -58, y: -22, color: '#ff3333' },
+          { x: -58, y: 22, color: '#ff3333' },
+        ],
+        rcsJets: [
+          { x: 35, y: -28, color: '#ff9900' },
+          { x: 35, y: 28, color: '#ff9900' },
+          { x: -30, y: -36, color: '#ff9900' },
+          { x: -30, y: 36, color: '#ff9900' },
         ],
       },
     },
@@ -117,11 +201,19 @@ export class AssetManager {
             img.onload = () => resolve();
             img.onerror = () => {
               console.warn(`Primary texture failed for ${key} at ${primarySrc}. Attempting fallbacks.`);
-              if (key === 'starter_ship') {
+              if (key === 'starter_ship' || key === 'scout_01') {
                 img.src = defaultShipStarterImg;
                 img.onload = () => resolve();
                 img.onerror = () => {
                   img.src = './assets/images/ships/ship-starter.png';
+                  img.onload = () => resolve();
+                  img.onerror = () => resolve();
+                };
+              } else if (key === 'freighter_01' || key === 'freighter') {
+                img.src = defaultFreighterImg;
+                img.onload = () => resolve();
+                img.onerror = () => {
+                  img.src = './assets/images/ships/Freighter.png';
                   img.onload = () => resolve();
                   img.onerror = () => resolve();
                 };
@@ -276,11 +368,29 @@ export class AssetManager {
   }
 
   public static getShip(id: string): ShipDefinition {
-    return this.shipsCatalog[id] || this.shipsCatalog['starter_ship'] || this.fallbackCatalog['starter_ship'];
+    if (id === 'scout' || id === 'scout_01') {
+      return this.shipsCatalog['scout_01'] || this.shipsCatalog['starter_ship'] || this.fallbackCatalog['scout_01'] || this.fallbackCatalog['starter_ship'];
+    }
+    if (id === 'freighter' || id === 'freighter_01') {
+      return this.shipsCatalog['freighter_01'] || this.fallbackCatalog['freighter_01'] || this.fallbackCatalog['starter_ship'];
+    }
+    return this.shipsCatalog[id] || this.fallbackCatalog[id] || this.shipsCatalog['starter_ship'] || this.fallbackCatalog['starter_ship'];
   }
 
   public static getShipImage(id: string): HTMLImageElement | undefined {
-    return this.loadedImages[id];
+    if (id === 'scout' || id === 'scout_01') {
+      return this.loadedImages['scout_01'] || this.loadedImages['starter_ship'];
+    }
+    if (id === 'freighter' || id === 'freighter_01') {
+      return this.loadedImages['freighter_01'] || this.loadedImages['freighter'];
+    }
+    return this.loadedImages[id] || this.loadedImages['starter_ship'];
+  }
+
+  public static getAllAvailableShips(): ShipDefinition[] {
+    const scout = this.getShip('starter_ship');
+    const freighter = this.getShip('freighter_01');
+    return [scout, freighter];
   }
 
   public static getDroneImage(): HTMLImageElement | null {

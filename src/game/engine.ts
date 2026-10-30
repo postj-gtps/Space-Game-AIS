@@ -641,6 +641,15 @@ export class PlayerShip {
     return AssetManager.getShip(this.activeShipId);
   }
 
+  public setShip(shipId: string): void {
+    this.activeShipId = shipId;
+    this.shields = this.config.stats.maxShields;
+    this.maxHull = this.config.stats.maxHull ?? 100;
+    this.hull = this.maxHull;
+    this.laserHeat = 0;
+    this.isOverheated = false;
+  }
+
   public reset(): void {
     this.x = 0;
     this.y = 0;

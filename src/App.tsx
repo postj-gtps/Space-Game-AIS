@@ -23,32 +23,33 @@ export const App: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const radarCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const [gameStarted, setGameStarted] = useState(false);
+  const [gameStarted, setGameStarted] = useState(true);
   const [gameOver, setGameOver] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const [showNebula, setShowNebula] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
+  const [activeShipId, setActiveShipId] = useState<string>('starter_ship');
 
   const [telemetry, setTelemetry] = useState<TelemetryData>({
-    shipName: 'SF-77 VANGUARD',
+    shipName: 'STARLIGHT SCOUT',
     fps: 60,
     speed: 0,
     headingDeg: 0,
     coordX: 0,
-    coordY: 0,
-    thrustStatus: 'IDLE (DRIFT)',
+    coordY: 3,
+    thrustStatus: 'DOCKED [STATION]',
     heatPct: 0,
     shieldPct: 100,
     hullPct: 100,
     isDead: false,
   });
 
-  const [isDocked, setIsDocked] = useState(false);
-  const isDockedRef = useRef(false);
+  const [isDocked, setIsDocked] = useState(true);
+  const isDockedRef = useRef(true);
 
   // Keep references to game engine instances
   const soundEngineRef = useRef<SoundEngine>(new SoundEngine());
-  const playerRef = useRef<PlayerShip>(new PlayerShip(0, 0));
+  const playerRef = useRef<PlayerShip>(new PlayerShip(0, 350));
   const baseStationRef = useRef<BaseStation>(new BaseStation(0, 350));
   const starfieldRef = useRef<Starfield>(new Starfield(350));
   const nebulaRef = useRef<NebulaRenderer>(new NebulaRenderer());
@@ -137,12 +138,20 @@ export const App: React.FC = () => {
     player.invulnerableTimer = 180;
   }, []);
 
+  const handleSelectShip = useCallback((shipId: string) => {
+    setActiveShipId(shipId);
+    playerRef.current.setShip(shipId);
+  }, []);
+
   const handleRestartGame = useCallback(() => {
-    isDockedRef.current = false;
-    setIsDocked(false);
+    isDockedRef.current = true;
+    setIsDocked(true);
     setGameOver(false);
     playerRef.current.reset();
-  }, []);
+    playerRef.current.x = 0;
+    playerRef.current.y = 350;
+    playerRef.current.setShip(activeShipId);
+  }, [activeShipId]);
 
   const handleToggleGrid = useCallback(() => {
     setShowGrid((prev) => !prev);
@@ -283,6 +292,10 @@ export const App: React.FC = () => {
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
+      if (isDockedRef.current) {
+        // While docked in station concourse/dealer, StationModal handles keyboard navigation
+        return;
+      }
       if (e.code === 'Space') e.preventDefault();
       handleKeyDownAction(e.code);
     };
@@ -362,6 +375,8 @@ export const App: React.FC = () => {
     const initCatalogAndStart = async () => {
       await AssetManager.init();
       playerRef.current.reset();
+      playerRef.current.x = 0;
+      playerRef.current.y = 350;
 
       const loop = (currentTime: number) => {
         const deltaTime = (currentTime - lastTime) / 1000;
@@ -947,6 +962,8 @@ export const App: React.FC = () => {
         onUndock={handleUndock}
         soundEngine={soundEngineRef.current}
         stationName={baseStationRef.current.name}
+        activeShipId={activeShipId}
+        onSelectShip={handleSelectShip}
       />
     </div>
   );

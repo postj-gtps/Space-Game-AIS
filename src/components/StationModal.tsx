@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { SoundEngine } from '../game/sound';
+import defaultShipStarterImg from '../../assets/images/ships/ship-starter.png';
+import defaultFreighterImg from '../../assets/images/ships/Freighter.png';
 
 export type StationView = 'CONCOURSE' | 'SHIP_DEALER' | 'BAR' | 'MISSION_COMPUTER' | 'MERCHANTS_HALL';
 
@@ -8,6 +10,8 @@ interface StationModalProps {
   onUndock: () => void;
   soundEngine: SoundEngine;
   stationName?: string;
+  activeShipId: string;
+  onSelectShip: (shipId: string) => void;
 }
 
 interface FacilityInfo {
@@ -22,6 +26,77 @@ interface FacilityInfo {
   details: string[];
 }
 
+export interface ShowroomShip {
+  id: string;
+  name: string;
+  callsign: string;
+  role: string;
+  description: string;
+  image: string;
+  stats: {
+    topSpeed: string;
+    thrust: string;
+    shields: number;
+    hull: number;
+    cargo: number;
+    crew: number;
+    laserCycle: string;
+    cost: number;
+  };
+  highlights: string[];
+}
+
+export const SHOWROOM_SHIPS: ShowroomShip[] = [
+  {
+    id: 'starter_ship',
+    name: 'Starlight Scout',
+    callsign: 'SF-77 VANGUARD',
+    role: 'LIGHT RECON / INTERCEPTOR FIGHTER',
+    description:
+      'High-agility military chassis equipped with twin plasma cannons and tri-jet sublight engines. Designed for rapid dogfighting, doglegs around asteroids, and fast reconnaissance.',
+    image: defaultShipStarterImg,
+    stats: {
+      topSpeed: '7.0 kn (105 kn)',
+      thrust: '0.09 Tri-Jet',
+      shields: 100,
+      hull: 100,
+      cargo: 25,
+      crew: 2,
+      laserCycle: '110 ms',
+      cost: 0,
+    },
+    highlights: [
+      'Agile 0.0325 rad/frame turning rate for precision evasion',
+      'Twin forward wing-mounted plasma muzzles with rapid cycle',
+      'Tri-jet sublight main thrusters + dual forward RCS jets',
+    ],
+  },
+  {
+    id: 'freighter_01',
+    name: 'Scipia Freighter',
+    callsign: 'HEAVY HAULER V-12',
+    role: 'ARMORED BULK TRANSPORT',
+    description:
+      'Heavy industrial transport chassis featuring reinforced composite hull plating, high-capacity cargo holds, and twin heavy plasma sublight drives. Perfect for deep asteroid mining operations.',
+    image: defaultFreighterImg,
+    stats: {
+      topSpeed: '6.2 kn (93 kn)',
+      thrust: '0.07 Heavy Drive',
+      shields: 135,
+      hull: 115,
+      cargo: 50,
+      crew: 4,
+      laserCycle: '130 ms',
+      cost: 30000,
+    },
+    highlights: [
+      'Double payload capacity (50 SCU) for high-yield mining hauls',
+      '+35% Shield capacity (135 MW) & +15% reinforced hull (115 HP)',
+      'Dual heavy red plasma sublight thrusters with 4-point lateral RCS',
+    ],
+  },
+];
+
 const FACILITIES: Record<Exclude<StationView, 'CONCOURSE'>, FacilityInfo> = {
   SHIP_DEALER: {
     id: 'SHIP_DEALER',
@@ -30,13 +105,13 @@ const FACILITIES: Record<Exclude<StationView, 'CONCOURSE'>, FacilityInfo> = {
     tagline: 'Vessel showroom, custom hulls & outfitting',
     roomTitle: 'Orbital Ship Dealer & Outfitting Yard',
     subtitle: 'Bays 01-12 · Starship Procurement & Hull Upgrades',
-    statusBadge: 'FACILITY UNDER RENOVATION',
+    statusBadge: 'SHOWROOM OPEN · 2 CHASSIS IN STOCK',
     description:
-      'The shipyard showroom is currently closed for orbital drydock expansion. Commercial transports, heavy frigates, and experimental interceptors are undergoing flight certification before public sale.',
+      'The shipyard showroom floor is open for certified pilots. Browse the showroom floor to inspect technical specifications, swap chassis hulls, or commandeer new military and commercial vessels.',
     details: [
-      'Inventory: 6 chassis models queued for delivery',
-      'Services: Hardpoint retrofit, reactor overclocking, hull plating',
-      'Notice: Station defense authority has temporarily halted civilian weapon sales',
+      'Available Vessels: Starlight Scout [Interceptor] & Scipia Freighter [Heavy Transport]',
+      'Services: Instant drydock hull transfer, subsystem synchronization, weapon mounting',
+      'Notice: Authorized pilots can freely switch hulls in drydock with full shield recharge',
     ],
   },
   BAR: {
@@ -94,6 +169,8 @@ export const StationModal: React.FC<StationModalProps> = ({
   onUndock,
   soundEngine,
   stationName = 'STARPORT VALIANT-PRIME',
+  activeShipId,
+  onSelectShip,
 }) => {
   const [currentView, setCurrentView] = useState<StationView>('CONCOURSE');
 
@@ -154,17 +231,36 @@ export const StationModal: React.FC<StationModalProps> = ({
             handleUndockAction();
             break;
         }
-      } else {
-        if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'Enter' || e.key === '5') {
+      } else if (currentView === 'SHIP_DEALER') {
+        if (e.key === '1' || e.key.toLowerCase() === 's') {
+          e.preventDefault();
+          soundEngine.playMenuBeep(true);
+          onSelectShip('starter_ship');
+        } else if (e.key === '2' || e.key.toLowerCase() === 'f') {
+          e.preventDefault();
+          soundEngine.playMenuBeep(true);
+          onSelectShip('freighter_01');
+        } else if (e.key === 'Escape' || e.key === 'Backspace') {
           e.preventDefault();
           handleBackToConcourse();
+        } else if (e.key === '5') {
+          e.preventDefault();
+          handleUndockAction();
+        }
+      } else {
+        if (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'Enter') {
+          e.preventDefault();
+          handleBackToConcourse();
+        } else if (e.key === '5') {
+          e.preventDefault();
+          handleUndockAction();
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, currentView, handleSelectFacility, handleBackToConcourse, handleUndockAction]);
+  }, [isOpen, currentView, handleSelectFacility, handleBackToConcourse, handleUndockAction, onSelectShip, soundEngine]);
 
   if (!isOpen) return null;
 
@@ -330,6 +426,170 @@ export const StationModal: React.FC<StationModalProps> = ({
                   <span className="text-xs font-semibold text-cyan-400 px-3 py-1 bg-cyan-950 border border-cyan-500/30 rounded">
                     Release [5] →
                   </span>
+                </button>
+              </div>
+            </div>
+          ) : currentView === 'SHIP_DEALER' ? (
+            /* Dedicated Ship Dealer Showroom View */
+            <div className="flex flex-col justify-between flex-1">
+              <div>
+                {/* Breadcrumb Header */}
+                <div className="flex items-center gap-2 text-xs text-slate-400 mb-2">
+                  <button
+                    onClick={handleBackToConcourse}
+                    className="hover:text-cyan-300 underline transition-colors cursor-pointer"
+                  >
+                    Station Concourse
+                  </button>
+                  <span aria-hidden="true">/</span>
+                  <span className="text-cyan-300 font-semibold">Ship Dealer & Outfitting Yard</span>
+                </div>
+
+                <div className="flex flex-wrap items-baseline justify-between gap-2 pb-3 border-b border-slate-800">
+                  <div>
+                    <h1 className="text-xl md:text-2xl font-bold text-white tracking-wide">
+                      Orbital Ship Dealer Showroom
+                    </h1>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Select your operational starship for immediate drydock deployment
+                    </p>
+                  </div>
+                  <div className="text-xs font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-500/40 px-3 py-1 rounded flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>2 CHASSIS CERTIFIED & READY</span>
+                  </div>
+                </div>
+
+                {/* Starship Showroom Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  {SHOWROOM_SHIPS.map((ship, idx) => {
+                    const isEquipped =
+                      activeShipId === ship.id ||
+                      (ship.id === 'starter_ship' && (activeShipId === 'scout_01' || activeShipId === 'scout')) ||
+                      (ship.id === 'freighter_01' && (activeShipId === 'freighter_01' || activeShipId === 'freighter'));
+
+                    return (
+                      <div
+                        key={ship.id}
+                        className={`relative p-4 rounded-lg border transition-all flex flex-col justify-between ${
+                          isEquipped
+                            ? 'bg-gradient-to-b from-cyan-950/50 to-slate-900/80 border-cyan-400 shadow-lg shadow-cyan-950/50'
+                            : 'bg-slate-900/40 hover:bg-slate-900/70 border-slate-800 hover:border-cyan-500/40'
+                        }`}
+                      >
+                        {/* Card Header & Badge */}
+                        <div>
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-cyan-950 border border-cyan-500/40 text-cyan-300">
+                                  KEY [{idx + 1}]
+                                </span>
+                                <h3 className="text-base font-bold text-white">{ship.name}</h3>
+                              </div>
+                              <span className="text-[10px] uppercase tracking-wider text-cyan-400 font-semibold block mt-0.5">
+                                {ship.role}
+                              </span>
+                            </div>
+                            {isEquipped ? (
+                              <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/90 border border-emerald-400 px-2 py-0.5 rounded shadow-sm shadow-emerald-400/30">
+                                ✓ ACTIVE VESSEL
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-mono text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded">
+                                {ship.stats.cost === 0 ? 'FREE REQUISITION' : `${ship.stats.cost.toLocaleString()} Cr`}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Holographic Drydock Bay Preview */}
+                          <div className="relative my-3 h-32 rounded bg-black/60 border border-cyan-500/20 flex items-center justify-center overflow-hidden p-2">
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,240,255,0.08)_0%,transparent_70%)]" />
+                            <img
+                              src={ship.image}
+                              alt={ship.name}
+                              className={`max-h-24 max-w-[80%] object-contain drop-shadow-[0_0_12px_rgba(0,240,255,0.35)] transition-transform duration-300 ${
+                                isEquipped ? 'scale-105' : 'hover:scale-100'
+                              }`}
+                            />
+                            <div className="absolute bottom-1 right-2 text-[9px] text-slate-500 font-mono">
+                              {ship.callsign}
+                            </div>
+                          </div>
+
+                          <p className="text-xs text-slate-300 leading-relaxed mb-3 line-clamp-2">
+                            {ship.description}
+                          </p>
+
+                          {/* Key Technical Specifications Grid */}
+                          <div className="grid grid-cols-3 gap-1.5 p-2.5 rounded bg-slate-950/70 border border-slate-800/80 text-[11px] font-mono mb-3">
+                            <div className="flex flex-col">
+                              <span className="text-slate-500 text-[9px]">MAX SPEED</span>
+                              <span className="text-cyan-300 font-bold">{ship.stats.topSpeed}</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-slate-500 text-[9px]">SHIELDS / HULL</span>
+                              <span className="text-emerald-400 font-bold">{ship.stats.shields} / {ship.stats.hull}</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-slate-500 text-[9px]">CARGO HOLD</span>
+                              <span className="text-amber-300 font-bold">{ship.stats.cargo} SCU</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-slate-500 text-[9px]">CREW CAPACITY</span>
+                              <span className="text-slate-200">{ship.stats.crew} Personnel</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-slate-500 text-[9px]">THRUST SYSTEM</span>
+                              <span className="text-cyan-300">{ship.stats.thrust}</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-slate-500 text-[9px]">LASER CYCLE</span>
+                              <span className="text-purple-300">{ship.stats.laserCycle}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Ship Action Button */}
+                        <div className="mt-2">
+                          {isEquipped ? (
+                            <div className="w-full py-2 px-3 rounded bg-emerald-950/60 border border-emerald-500/60 text-emerald-300 font-bold text-xs flex items-center justify-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                              <span>CURRENTLY PILOTING IN DRYDOCK</span>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                soundEngine.playMenuBeep(true);
+                                onSelectShip(ship.id);
+                              }}
+                              className="w-full py-2 px-3 rounded bg-cyan-900/70 hover:bg-cyan-800 border border-cyan-400 text-cyan-200 hover:text-white font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow hover:shadow-cyan-500/40"
+                            >
+                              <span>[{idx + 1}] COMMANDEER {ship.name.toUpperCase()}</span>
+                              <span className="text-cyan-300">→</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Sub-view Navigation Controls */}
+              <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between">
+                <button
+                  onClick={handleBackToConcourse}
+                  className="px-4 py-2 text-xs md:text-sm font-semibold text-slate-200 bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-slate-500 rounded transition-colors flex items-center gap-2 cursor-pointer"
+                >
+                  <span>← Back to Concourse [Esc]</span>
+                </button>
+
+                <button
+                  onClick={handleUndockAction}
+                  className="px-4 py-2 text-xs md:text-sm font-semibold text-cyan-300 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-400 hover:border-cyan-300 rounded transition-colors flex items-center gap-2 cursor-pointer shadow-lg shadow-cyan-950/50"
+                >
+                  <span>Launch Vessel into Space [5] →</span>
                 </button>
               </div>
             </div>
