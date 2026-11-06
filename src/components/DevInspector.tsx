@@ -1,5 +1,22 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { X, Copy, Check, Crosshair, Navigation, Compass, Layers, Plus, Terminal } from 'lucide-react';
+import {
+  X,
+  Copy,
+  Check,
+  Crosshair,
+  Navigation,
+  Compass,
+  Layers,
+  Plus,
+  Terminal,
+  Move,
+  Target,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  Lock,
+} from 'lucide-react';
 import { RuntimeMapEntity, BLUEPRINTS, STARTER_SHIP_CONFIG } from '../game/mapLoader';
 import { InstancePlacement } from '../types/universe';
 
@@ -7,6 +24,13 @@ export interface DevInspectorProps {
   isOpen: boolean;
   onClose: () => void;
   playerPos: { x: number; y: number };
+  cameraPos: { x: number; y: number };
+  isFreePan: boolean;
+  onToggleFreePan: () => void;
+  onRecenterCamera: () => void;
+  onFocusEntity: (ent: RuntimeMapEntity) => void;
+  onNudgeCamera: (dx: number, dy: number) => void;
+  onLockDevMode: () => void;
   zoom: number;
   activeEntities: RuntimeMapEntity[];
   selectedOriginId: string | null;
@@ -22,6 +46,13 @@ export const DevInspector: React.FC<DevInspectorProps> = ({
   isOpen,
   onClose,
   playerPos,
+  cameraPos,
+  isFreePan,
+  onToggleFreePan,
+  onRecenterCamera,
+  onFocusEntity,
+  onNudgeCamera,
+  onLockDevMode,
   zoom,
   activeEntities,
   selectedOriginId,
@@ -35,7 +66,8 @@ export const DevInspector: React.FC<DevInspectorProps> = ({
   const [selectedTypeId, setSelectedTypeId] = useState<string>('mining_station_v1');
   const [customInstanceId, setCustomInstanceId] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'ruler' | 'export' | 'entities'>('ruler');
+  const [activeTab, setActiveTab] = useState<'ruler' | 'pan' | 'export' | 'entities'>('ruler');
+  const [nudgeStep, setNudgeStep] = useState<number>(2000);
 
   // Origin entity for ruler
   const originEntity = useMemo(() => {
@@ -80,9 +112,11 @@ export const DevInspector: React.FC<DevInspectorProps> = ({
     };
   }, [originEntity, targetWorldPos]);
 
-  // Generate formatted JSON snippet based on clicked coordinates or player coordinates
-  const targetSpawnPos = clickedWorldPos || { x: Math.round(playerPos.x), y: Math.round(playerPos.y) };
-  const effectiveId = customInstanceId.trim() || `${selectedTypeId}_${Math.abs(Math.round(targetSpawnPos.x))}_${Math.abs(Math.round(targetSpawnPos.y))}`;
+  // Generate formatted JSON snippet based on clicked coordinates or camera center
+  const targetSpawnPos = clickedWorldPos || { x: Math.round(cameraPos.x), y: Math.round(cameraPos.y) };
+  const effectiveId =
+    customInstanceId.trim() ||
+    `${selectedTypeId}_${Math.abs(Math.round(targetSpawnPos.x))}_${Math.abs(Math.round(targetSpawnPos.y))}`;
 
   const jsonSnippet = useMemo(() => {
     const obj = {
@@ -121,24 +155,33 @@ export const DevInspector: React.FC<DevInspectorProps> = ({
 
   return (
     <aside
-      className="fixed top-14 right-4 z-50 w-96 max-h-[85vh] flex flex-col bg-[#07090e]/95 backdrop-blur-md border border-slate-800 rounded-lg shadow-2xl text-slate-200 overflow-hidden text-xs select-none"
+      className="fixed top-14 right-4 z-50 w-96 max-h-[88vh] flex flex-col bg-[#07090e]/95 backdrop-blur-md border border-amber-500/40 rounded-lg shadow-2xl text-slate-200 overflow-hidden text-xs select-none"
       aria-label="Developer Map Inspector"
     >
       {/* Header bar */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-800 bg-slate-900/60">
         <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-cyan-400" />
+          <Terminal className="w-4 h-4 text-amber-400" />
           <span className="font-semibold tracking-wide text-slate-100 uppercase">Dev Inspector</span>
           <span className="text-slate-500">·</span>
-          <span className="font-mono text-[10px] text-amber-400">HOTKEY [ ` ]</span>
+          <span className="text-[10px] text-emerald-400 font-semibold">AUTHENTICATED</span>
         </div>
-        <button
-          onClick={onClose}
-          className="p-1 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded transition-colors"
-          title="Close Inspector (` key)"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onLockDevMode}
+            className="p-1 text-slate-400 hover:text-amber-300 hover:bg-slate-800 rounded transition-colors"
+            title="Lock DevMode"
+          >
+            <Lock className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={onClose}
+            className="p-1 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded transition-colors"
+            title="Close Inspector"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Breadcrumb strip */}
@@ -148,9 +191,36 @@ export const DevInspector: React.FC<DevInspectorProps> = ({
           <span>/</span>
           <span className="text-slate-200">{currentLocation}</span>
         </div>
-        <div className="text-slate-500 tabular-nums shrink-0">
-          ZOOM: {zoom.toFixed(2)}x
+        <div className="text-slate-500 tabular-nums shrink-0">ZOOM: {zoom.toFixed(2)}x</div>
+      </div>
+
+      {/* Free Pan / Camera status bar */}
+      <div className="px-3 py-2 bg-slate-900/60 border-b border-slate-800 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onToggleFreePan}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded font-semibold text-[11px] transition-colors cursor-pointer border ${
+              isFreePan
+                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.4)]'
+                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+            }`}
+          >
+            <Move className="w-3.5 h-3.5" />
+            <span>Free Pan: {isFreePan ? 'ACTIVE' : 'OFF'}</span>
+          </button>
+          <span className="text-[10px] text-slate-400 font-mono tabular-nums">
+            Cam: [{Math.round(cameraPos.x)}, {Math.round(cameraPos.y)}]
+          </span>
         </div>
+
+        <button
+          onClick={onRecenterCamera}
+          className="flex items-center gap-1 px-2 py-1 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/40 text-cyan-300 rounded text-[10px] font-mono transition-colors cursor-pointer"
+          title="Recenter camera on Player Vessel"
+        >
+          <Target className="w-3 h-3" />
+          Recenter
+        </button>
       </div>
 
       {/* Live Coordinate Transformer Readout */}
@@ -160,15 +230,16 @@ export const DevInspector: React.FC<DevInspectorProps> = ({
             <Crosshair className="w-3.5 h-3.5 text-cyan-400" />
             Coordinate Transformer
           </span>
-          <span className="text-[10px] text-slate-500">Click canvas to sample</span>
+          <span className="text-[10px] text-slate-500">Right-click & drag to pan</span>
         </div>
 
         <div className="grid grid-cols-2 gap-2 font-mono text-[11px]">
           <div className="bg-slate-950/80 p-2 rounded border border-slate-800/60">
-            <div className="text-[9px] uppercase text-slate-400">Clicked World Coordinates</div>
+            <div className="text-[9px] uppercase text-slate-400">Clicked World Coords</div>
             {clickedWorldPos ? (
               <div className="text-cyan-300 font-bold tabular-nums">
-                X: {Math.round(clickedWorldPos.x).toLocaleString()}<br />
+                X: {Math.round(clickedWorldPos.x).toLocaleString()}
+                <br />
                 Y: {Math.round(clickedWorldPos.y).toLocaleString()}
               </div>
             ) : (
@@ -177,9 +248,10 @@ export const DevInspector: React.FC<DevInspectorProps> = ({
           </div>
 
           <div className="bg-slate-950/80 p-2 rounded border border-slate-800/60">
-            <div className="text-[9px] uppercase text-slate-400">Ship Camera Coordinates</div>
+            <div className="text-[9px] uppercase text-slate-400">Vessel Position</div>
             <div className="text-slate-200 font-bold tabular-nums">
-              X: {Math.round(playerPos.x).toLocaleString()}<br />
+              X: {Math.round(playerPos.x).toLocaleString()}
+              <br />
               Y: {Math.round(playerPos.y).toLocaleString()}
             </div>
           </div>
@@ -196,7 +268,7 @@ export const DevInspector: React.FC<DevInspectorProps> = ({
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-800 bg-slate-950/40 px-2 pt-1">
+      <div className="flex border-b border-slate-800 bg-slate-950/40 px-2 pt-1 overflow-x-auto">
         <button
           onClick={() => setActiveTab('ruler')}
           className={`flex items-center gap-1.5 px-3 py-1.5 border-b-2 font-medium text-[11px] transition-colors whitespace-nowrap ${
@@ -207,6 +279,17 @@ export const DevInspector: React.FC<DevInspectorProps> = ({
         >
           <Compass className="w-3.5 h-3.5" />
           Flight Ruler
+        </button>
+        <button
+          onClick={() => setActiveTab('pan')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 border-b-2 font-medium text-[11px] transition-colors whitespace-nowrap ${
+            activeTab === 'pan'
+              ? 'border-amber-400 text-amber-300 bg-slate-900/40'
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Move className="w-3.5 h-3.5" />
+          Map Pan
         </button>
         <button
           onClick={() => setActiveTab('export')}
@@ -304,7 +387,107 @@ export const DevInspector: React.FC<DevInspectorProps> = ({
           </div>
         )}
 
-        {/* TAB 2: JSON EXPORTER */}
+        {/* TAB 2: FULL MAP PAN CONTROLS */}
+        {activeTab === 'pan' && (
+          <div className="space-y-3">
+            <div className="p-2.5 bg-slate-950/80 rounded border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between text-slate-300">
+                <span className="font-semibold text-xs">Full Map Free-Cam Controls</span>
+                <span className="text-[10px] text-cyan-400">Right-Click Drag Active</span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Click and drag on the space canvas using <strong className="text-cyan-300">Right-Click</strong> or{' '}
+                <strong className="text-cyan-300">Middle-Click</strong> to freely pan across the entire 100,000 unit world.
+              </p>
+            </div>
+
+            {/* Nudge Cardinal Direction D-Pad */}
+            <div className="p-2.5 bg-slate-950/80 rounded border border-slate-800 space-y-2">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] uppercase font-bold text-slate-400">Step Jump Distance</span>
+                <div className="flex gap-1">
+                  {[1000, 2000, 5000].map((step) => (
+                    <button
+                      key={step}
+                      onClick={() => setNudgeStep(step)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer transition-colors ${
+                        nudgeStep === step
+                          ? 'bg-cyan-600 text-white font-bold'
+                          : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {step / 1000}k
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* D-Pad Buttons */}
+              <div className="flex flex-col items-center gap-1.5 py-1">
+                <button
+                  onClick={() => onNudgeCamera(0, -nudgeStep)}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 hover:border-cyan-400 transition-colors cursor-pointer"
+                  title="Pan North"
+                >
+                  <ArrowUp className="w-4 h-4" />
+                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => onNudgeCamera(-nudgeStep, 0)}
+                    className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 hover:border-cyan-400 transition-colors cursor-pointer"
+                    title="Pan West"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={onRecenterCamera}
+                    className="p-2 bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 rounded border border-cyan-500/50 hover:border-cyan-400 transition-colors cursor-pointer"
+                    title="Center on Ship"
+                  >
+                    <Target className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => onNudgeCamera(nudgeStep, 0)}
+                    className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 hover:border-cyan-400 transition-colors cursor-pointer"
+                    title="Pan East"
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+                <button
+                  onClick={() => onNudgeCamera(0, nudgeStep)}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded border border-slate-700 hover:border-cyan-400 transition-colors cursor-pointer"
+                  title="Pan South"
+                >
+                  <ArrowDown className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Jumps to Key Entities */}
+            <div>
+              <label className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                Quick Teleport Viewport to Entity
+              </label>
+              <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                {activeEntities.map((ent) => (
+                  <button
+                    key={ent.id}
+                    onClick={() => onFocusEntity(ent)}
+                    className="w-full flex items-center justify-between p-1.5 rounded bg-slate-950 hover:bg-slate-800 border border-slate-800/80 text-left cursor-pointer transition-colors"
+                  >
+                    <span className="font-semibold text-slate-200 truncate">{ent.displayName}</span>
+                    <span className="font-mono text-[10px] text-cyan-400 tabular-nums">
+                      [{Math.round(ent.x)}, {Math.round(ent.y)}]
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: JSON EXPORTER */}
         {activeTab === 'export' && (
           <div className="space-y-3">
             <div>
@@ -352,7 +535,7 @@ export const DevInspector: React.FC<DevInspectorProps> = ({
             <div className="flex gap-2">
               <button
                 onClick={handleCopyJSON}
-                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 bg-cyan-600 hover:bg-cyan-500 text-white font-medium rounded transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 bg-cyan-600 hover:bg-cyan-500 text-white font-medium rounded transition-colors cursor-pointer"
               >
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                 {copied ? 'Copied to Clipboard!' : 'Copy JSON Block'}
@@ -361,7 +544,7 @@ export const DevInspector: React.FC<DevInspectorProps> = ({
               {onQuickAddEntity && (
                 <button
                   onClick={handleAddLive}
-                  className="flex items-center justify-center gap-1.5 py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded transition-colors"
+                  className="flex items-center justify-center gap-1.5 py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded transition-colors cursor-pointer"
                   title="Spawn instance in current active session"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -372,7 +555,7 @@ export const DevInspector: React.FC<DevInspectorProps> = ({
           </div>
         )}
 
-        {/* TAB 3: ACTIVE ENTITIES LIST */}
+        {/* TAB 4: ACTIVE ENTITIES LIST */}
         {activeTab === 'entities' && (
           <div className="space-y-1.5">
             <div className="text-[10px] text-slate-400 uppercase font-semibold flex justify-between">
@@ -386,26 +569,43 @@ export const DevInspector: React.FC<DevInspectorProps> = ({
                 return (
                   <div
                     key={ent.id}
-                    onClick={() => onSelectOriginId(ent.id)}
-                    className={`p-2 rounded border cursor-pointer transition-colors ${
+                    className={`p-2 rounded border transition-colors flex items-center justify-between ${
                       isSelected
                         ? 'bg-cyan-950/60 border-cyan-500 text-cyan-100'
                         : 'bg-slate-950/60 border-slate-800/80 text-slate-300 hover:bg-slate-900'
                     }`}
                   >
-                    <div className="flex items-center justify-between font-semibold">
-                      <span className="truncate">{ent.displayName}</span>
-                      <span
-                        className="text-[9px] px-1 rounded uppercase font-mono"
-                        style={{ color: ent.radarColor, border: `1px solid ${ent.radarColor}40` }}
-                      >
-                        {ent.category}
-                      </span>
+                    <div
+                      className="cursor-pointer flex-1 min-w-0"
+                      onClick={() => onSelectOriginId(ent.id)}
+                    >
+                      <div className="flex items-center justify-between font-semibold">
+                        <span className="truncate">{ent.displayName}</span>
+                        <span
+                          className="text-[9px] px-1 rounded uppercase font-mono ml-2 shrink-0"
+                          style={{ color: ent.radarColor, border: `1px solid ${ent.radarColor}40` }}
+                        >
+                          {ent.category}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between font-mono text-[10px] text-slate-500 mt-1">
+                        <span className="truncate">ID: {ent.id}</span>
+                        <span className="tabular-nums shrink-0">
+                          [{Math.round(ent.x)}, {Math.round(ent.y)}]
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between font-mono text-[10px] text-slate-500 mt-1">
-                      <span>ID: {ent.id}</span>
-                      <span className="tabular-nums">[{Math.round(ent.x)}, {Math.round(ent.y)}]</span>
-                    </div>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onFocusEntity(ent);
+                      }}
+                      className="ml-2 p-1 bg-slate-800 hover:bg-cyan-900 text-slate-300 hover:text-cyan-200 rounded text-[10px] transition-colors cursor-pointer shrink-0"
+                      title="Jump Camera to Entity"
+                    >
+                      <Target className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 );
               })}
@@ -416,8 +616,8 @@ export const DevInspector: React.FC<DevInspectorProps> = ({
 
       {/* Footer status */}
       <div className="px-3 py-2 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-500 font-mono">
-        <span>Vessel Max Speed: {STARTER_SHIP_CONFIG.maxSpeed} u/tick</span>
-        <span>Toggle: [ ` ]</span>
+        <span>Vessel Speed: {STARTER_SHIP_CONFIG.maxSpeed} u/tick</span>
+        <span>Right-Click: Pan</span>
       </div>
     </aside>
   );

@@ -22,6 +22,7 @@ import { MapBubbleFile, InstancePlacement } from './types/universe';
 import { HUD } from './components/HUD';
 import { StationModal } from './components/StationModal';
 import { DevInspector } from './components/DevInspector';
+import { DevAuthModal } from './components/DevAuthModal';
 
 export interface WarpState {
   phase: 'idle' | 'spooling' | 'warp' | 'drop';
@@ -48,7 +49,7 @@ export const App: React.FC = () => {
 
   // Unified Runtime Entities Collection
   const activeEntitiesRef = useRef<RuntimeMapEntity[]>([]);
-  const [activeEntitiesCount, setActiveEntitiesCount] = useState<number>(0);
+  const [, setActiveEntitiesCount] = useState<number>(0);
 
   // Warp State for Autopilot Traversal
   const [warpState, setWarpState] = useState<WarpState>({
@@ -60,8 +61,30 @@ export const App: React.FC = () => {
   const warpStateRef = useRef<WarpState>(warpState);
   warpStateRef.current = warpState;
 
-  // --- Developer Inspector State ---
+  // --- Developer Mode & Authentication State ---
+  const [isDevModeUnlocked, setIsDevModeUnlocked] = useState<boolean>(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isDevInspectorOpen, setIsDevInspectorOpen] = useState<boolean>(false);
+
+  // --- Free-Cam / Camera Pan State ---
+  const [isFreePan, setIsFreePan] = useState<boolean>(false);
+  const isFreePanRef = useRef<boolean>(false);
+  isFreePanRef.current = isFreePan;
+
+  const cameraPosRef = useRef<{ x: number; y: number }>({
+    x: activeMapFile.spawnPosition.x,
+    y: activeMapFile.spawnPosition.y,
+  });
+  const [hudCameraPos, setHudCameraPos] = useState<{ x: number; y: number }>({
+    x: activeMapFile.spawnPosition.x,
+    y: activeMapFile.spawnPosition.y,
+  });
+
+  // Mouse pan tracking
+  const isDraggingPanRef = useRef<boolean>(false);
+  const lastMousePosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // Inspector Probes & Ruler
   const [selectedOriginId, setSelectedOriginId] = useState<string | null>(null);
   const [clickedWorldPos, setClickedWorldPos] = useState<{ x: number; y: number } | null>(null);
   const [cursorWorldPos, setCursorWorldPos] = useState<{ x: number; y: number } | null>(null);
@@ -171,6 +194,8 @@ export const App: React.FC = () => {
         if (mapData.spawnPosition.angle !== undefined) {
           player.angle = mapData.spawnPosition.angle;
         }
+        cameraPosRef.current = { x: player.x, y: player.y };
+        setHudCameraPos({ x: player.x, y: player.y });
         player.dockingGraceTimer = 3.0;
         player.invulnerableTimer = 180;
       }
@@ -187,7 +212,6 @@ export const App: React.FC = () => {
       const targetBubble = availableBubbles.find((b) => b.id === targetBubbleId);
       const targetName = targetBubble?.name || targetBubbleId;
 
-      // If currently docked, disengage clamps
       if (isDockedRef.current) {
         isDockedRef.current = false;
         setIsDocked(false);
@@ -217,7 +241,6 @@ export const App: React.FC = () => {
           progress: 0.5,
         });
 
-        // Unload previous bubble's entity array and load target bubble
         mountMapBubble(targetBubbleId, true);
 
         // Phase 3: Sector Drop & Deceleration (0.7s)
@@ -275,6 +298,7 @@ export const App: React.FC = () => {
     player.vy = Math.sin(angle) * 2.2;
     player.dockingGraceTimer = 3.5;
     player.invulnerableTimer = 180;
+    cameraPosRef.current = { x: player.x, y: player.y };
   }, [currentDockedEntity]);
 
   const handleSelectShip = useCallback((shipId: string) => {
@@ -290,6 +314,8 @@ export const App: React.FC = () => {
     playerRef.current.x = activeMapFile.spawnPosition.x;
     playerRef.current.y = activeMapFile.spawnPosition.y;
     playerRef.current.setShip(activeShipId);
+    cameraPosRef.current = { x: playerRef.current.x, y: playerRef.current.y };
+    setHudCameraPos({ x: playerRef.current.x, y: playerRef.current.y });
   }, [activeShipId, activeMapFile]);
 
   const handleToggleGrid = useCallback(() => {
@@ -308,8 +334,59 @@ export const App: React.FC = () => {
     });
   }, []);
 
+  // --- Password-Protected Dev Mode Activation ---
   const handleToggleDevInspector = useCallback(() => {
-    setIsDevInspectorOpen((prev) => !prev);
+    if (!isDevModeUnlocked) {
+      setIsAuthModalOpen(true);
+    } else {
+      setIsDevInspectorOpen((prev) => {
+        const next = !prev;
+        if (next) {
+          setIsFreePan(true);
+        }
+        return next;
+      });
+    }
+  }, [isDevModeUnlocked]);
+
+  const handleAuthSuccess = useCallback(() => {
+    setIsDevModeUnlocked(true);
+    setIsAuthModalOpen(false);
+    setIsDevInspectorOpen(true);
+    setIsFreePan(true);
+  }, []);
+
+  const handleLockDevMode = useCallback(() => {
+    setIsDevModeUnlocked(false);
+    setIsDevInspectorOpen(false);
+    setIsFreePan(false);
+    cameraPosRef.current = { x: playerRef.current.x, y: playerRef.current.y };
+    setHudCameraPos({ x: playerRef.current.x, y: playerRef.current.y });
+  }, []);
+
+  // --- Camera Free-Pan Controls ---
+  const handleToggleFreePan = useCallback(() => {
+    setIsFreePan((prev) => !prev);
+  }, []);
+
+  const handleRecenterCamera = useCallback(() => {
+    const player = playerRef.current;
+    cameraPosRef.current = { x: player.x, y: player.y };
+    setHudCameraPos({ x: player.x, y: player.y });
+  }, []);
+
+  const handleFocusEntity = useCallback((ent: RuntimeMapEntity) => {
+    cameraPosRef.current = { x: ent.x, y: ent.y };
+    setHudCameraPos({ x: ent.x, y: ent.y });
+    setSelectedOriginId(ent.id);
+    setIsFreePan(true);
+  }, []);
+
+  const handleNudgeCamera = useCallback((dx: number, dy: number) => {
+    cameraPosRef.current.x += dx;
+    cameraPosRef.current.y += dy;
+    setHudCameraPos({ x: cameraPosRef.current.x, y: cameraPosRef.current.y });
+    setIsFreePan(true);
   }, []);
 
   // Quick live entity insertion from Dev Inspector
@@ -327,12 +404,6 @@ export const App: React.FC = () => {
       soundEngineRef.current.init();
       const keys = keysRef.current;
       const player = playerRef.current;
-
-      // Dev Inspector hotkey toggle: Backquote (` or ~)
-      if (code === 'Backquote') {
-        setIsDevInspectorOpen((prev) => !prev);
-        return;
-      }
 
       if (isDockedRef.current) {
         if (code === 'Digit5' || code === 'Numpad5' || code === 'Escape') {
@@ -408,21 +479,69 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  // --- Canvas Coordinate Transformer on Click and Move ---
+  // --- Canvas Mouse Handlers: Click, Move, and Direct Drag Panning ---
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    // Right click (2) or middle click (1), or left click when dragging pan in devmode
+    if (e.button === 2 || e.button === 1 || (e.button === 0 && e.shiftKey)) {
+      isDraggingPanRef.current = true;
+      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+      setIsFreePan(true);
+    }
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    isDraggingPanRef.current = false;
+  }, []);
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const currentZoom = zoomRef.current;
+
+      // Direct Camera Drag Panning
+      if (isDraggingPanRef.current) {
+        const deltaScreenX = e.clientX - lastMousePosRef.current.x;
+        const deltaScreenY = e.clientY - lastMousePosRef.current.y;
+        lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+
+        cameraPosRef.current.x -= deltaScreenX / currentZoom;
+        cameraPosRef.current.y -= deltaScreenY / currentZoom;
+        setHudCameraPos({ x: cameraPosRef.current.x, y: cameraPosRef.current.y });
+      }
+
+      // Cursor World Probe
+      const rect = canvas.getBoundingClientRect();
+      const screenX = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const screenY = (e.clientY - rect.top) * (canvas.height / rect.height);
+      const cam = cameraPosRef.current;
+
+      const worldX = cam.x + (screenX - canvas.width / 2) / currentZoom;
+      const worldY = cam.y + (screenY - canvas.height / 2) / currentZoom;
+
+      setCursorWorldPos({ x: worldX, y: worldY });
+    },
+    []
+  );
+
   const handleCanvasClick = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
+      // Ignore if user was dragging pan
+      if (e.button !== 0) return;
+
       const canvas = canvasRef.current;
       if (!canvas) return;
 
       const rect = canvas.getBoundingClientRect();
       const screenX = (e.clientX - rect.left) * (canvas.width / rect.width);
       const screenY = (e.clientY - rect.top) * (canvas.height / rect.height);
-      const player = playerRef.current;
+      const cam = cameraPosRef.current;
       const currentZoom = zoomRef.current;
 
       // Coordinate Transformer: Screen pixel -> World coordinates
-      const worldX = player.x + (screenX - canvas.width / 2) / currentZoom;
-      const worldY = player.y + (screenY - canvas.height / 2) / currentZoom;
+      const worldX = cam.x + (screenX - canvas.width / 2) / currentZoom;
+      const worldY = cam.y + (screenY - canvas.height / 2) / currentZoom;
 
       setClickedWorldPos({ x: worldX, y: worldY });
 
@@ -435,25 +554,6 @@ export const App: React.FC = () => {
       if (clickedEntity) {
         setSelectedOriginId(clickedEntity.id);
       }
-    },
-    []
-  );
-
-  const handleCanvasMouseMove = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const screenX = (e.clientX - rect.left) * (canvas.width / rect.width);
-      const screenY = (e.clientY - rect.top) * (canvas.height / rect.height);
-      const player = playerRef.current;
-      const currentZoom = zoomRef.current;
-
-      const worldX = player.x + (screenX - canvas.width / 2) / currentZoom;
-      const worldY = player.y + (screenY - canvas.height / 2) / currentZoom;
-
-      setCursorWorldPos({ x: worldX, y: worldY });
     },
     []
   );
@@ -473,14 +573,29 @@ export const App: React.FC = () => {
 
     const onKeyDown = (e: KeyboardEvent) => {
       // Don't intercept typing in inputs
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
         return;
       }
+
+      // Intercept Firefox quick-search keys (' and /) to prevent accidental quick search browser interception
+      if (e.key === "'" || e.code === 'Quote') {
+        e.preventDefault();
+        return;
+      }
+
       handleKeyDownAction(e.code);
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
         return;
       }
       handleKeyUpAction(e.code);
@@ -552,6 +667,12 @@ export const App: React.FC = () => {
         const keys = keysRef.current;
         const activeEntities = activeEntitiesRef.current;
         const currentWarp = warpStateRef.current;
+
+        // Camera follow logic
+        if (!isFreePanRef.current) {
+          cameraPosRef.current.x = player.x;
+          cameraPosRef.current.y = player.y;
+        }
 
         // Player & Projectiles update pass
         if (!isDockedRef.current && currentWarp.phase !== 'warp') {
@@ -632,7 +753,6 @@ export const App: React.FC = () => {
                 );
                 ent.takeDamage(2, player.x, player.y, soundEngine, particleSystem);
               } else if (ent.category === 'defense' || ent.category === 'station' || ent.isFallback) {
-                // Gentle deflection from station hull or defense platform
                 const bounce = Math.atan2(player.y - ent.y, player.x - ent.x);
                 player.vx = Math.cos(bounce) * 3;
                 player.vy = Math.sin(bounce) * 3;
@@ -645,7 +765,6 @@ export const App: React.FC = () => {
             const proj = projectiles[pIdx];
             if (!proj.active) continue;
 
-            // Player projectiles vs non-station entities
             if (!proj.isEnemy && ent.category !== 'station') {
               const dist = Math.hypot(proj.x - ent.x, proj.y - ent.y);
               if (dist < ent.radius + proj.radius) {
@@ -656,7 +775,6 @@ export const App: React.FC = () => {
               }
             }
 
-            // Enemy projectiles vs Player
             if (proj.isEnemy && !player.isDead && !isDockedRef.current) {
               const pRadius = player.config.stats.collisionRadius || 25;
               const dist = Math.hypot(player.x - proj.x, player.y - proj.y);
@@ -684,10 +802,11 @@ export const App: React.FC = () => {
         // Viewport Zoom Interpolation
         zoomRef.current += (targetZoomRef.current - zoomRef.current) * 0.15;
         const currentZoom = zoomRef.current;
+        const cam = cameraPosRef.current;
 
         // --- Dynamic Rendering Pass over activeEntities ---
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        starfield.draw(ctx, player.x, player.y, canvas.width, canvas.height);
+        starfield.draw(ctx, cam.x, cam.y, canvas.width, canvas.height);
 
         ctx.save();
         let shakeX = 0;
@@ -698,12 +817,13 @@ export const App: React.FC = () => {
           shakeDurationRef.current--;
         }
 
+        // Camera Pan & Zoom Transform
         ctx.translate(canvas.width / 2 + shakeX, canvas.height / 2 + shakeY);
         ctx.scale(currentZoom, currentZoom);
-        ctx.translate(-player.x, -player.y);
+        ctx.translate(-cam.x, -cam.y);
 
         nebula.draw(ctx, showNebula);
-        drawSectorGrid(ctx, player.x, player.y, canvas.width / currentZoom, canvas.height / currentZoom, showGrid);
+        drawSectorGrid(ctx, cam.x, cam.y, canvas.width / currentZoom, canvas.height / currentZoom, showGrid);
 
         // Render all entities in activeEntities dynamically
         for (const ent of activeEntities) {
@@ -760,8 +880,18 @@ export const App: React.FC = () => {
             const text = `${Math.round(dist).toLocaleString()}u · ${timeStr} @ ${maxSpeed.toFixed(1)} u/s`;
             const textMetrics = ctx.measureText(text);
             const pad = 6 / currentZoom;
-            ctx.fillRect(midX - textMetrics.width / 2 - pad, midY - 14 / currentZoom - pad, textMetrics.width + pad * 2, 20 / currentZoom + pad * 2);
-            ctx.strokeRect(midX - textMetrics.width / 2 - pad, midY - 14 / currentZoom - pad, textMetrics.width + pad * 2, 20 / currentZoom + pad * 2);
+            ctx.fillRect(
+              midX - textMetrics.width / 2 - pad,
+              midY - 14 / currentZoom - pad,
+              textMetrics.width + pad * 2,
+              20 / currentZoom + pad * 2
+            );
+            ctx.strokeRect(
+              midX - textMetrics.width / 2 - pad,
+              midY - 14 / currentZoom - pad,
+              textMetrics.width + pad * 2,
+              20 / currentZoom + pad * 2
+            );
             ctx.fillStyle = '#00f0ff';
             ctx.fillText(text, midX - textMetrics.width / 2, midY + 2 / currentZoom);
             ctx.restore();
@@ -779,7 +909,7 @@ export const App: React.FC = () => {
           const numRays = currentWarp.phase === 'warp' ? 60 : 25;
           const raySpeed = currentWarp.phase === 'warp' ? 800 : 200;
           for (let r = 0; r < numRays; r++) {
-            const angle = (r / numRays) * Math.PI * 2 + (currentTime * 0.002);
+            const angle = (r / numRays) * Math.PI * 2 + currentTime * 0.002;
             const innerR = 40 + Math.random() * 80;
             const outerR = innerR + raySpeed + Math.random() * 400;
             ctx.beginPath();
@@ -817,7 +947,7 @@ export const App: React.FC = () => {
             radarCtx.arc(center, center, center * 0.8, 0, Math.PI * 2);
             radarCtx.stroke();
 
-            // Render all activeEntities on Radar
+            // Render all activeEntities on Radar relative to camera or player
             for (const ent of activeEntities) {
               const dx = ent.x - player.x;
               const dy = ent.y - player.y;
@@ -950,8 +1080,13 @@ export const App: React.FC = () => {
         id="gameCanvas"
         ref={canvasRef}
         onClick={handleCanvasClick}
-        onMouseMove={handleCanvasMouseMove}
-        className="block w-full h-full bg-black cursor-crosshair"
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseMove={handleMouseMove}
+        onContextMenu={(e) => e.preventDefault()}
+        className={`block w-full h-full bg-black ${
+          isFreePan ? 'cursor-grab active:cursor-grabbing' : 'cursor-crosshair'
+        }`}
       />
 
       {/* Heads-Up Display with Dev Inspector & Autopilot Jump Trigger */}
@@ -983,11 +1118,25 @@ export const App: React.FC = () => {
         warpState={warpState}
       />
 
-      {/* In-Engine Developer Inspector Overlay */}
+      {/* Developer Authorization Modal (Password: DEVMODE) */}
+      <DevAuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={handleAuthSuccess}
+      />
+
+      {/* In-Engine Developer Inspector Overlay with Map Panning */}
       <DevInspector
         isOpen={isDevInspectorOpen}
         onClose={() => setIsDevInspectorOpen(false)}
         playerPos={{ x: playerRef.current.x, y: playerRef.current.y }}
+        cameraPos={hudCameraPos}
+        isFreePan={isFreePan}
+        onToggleFreePan={handleToggleFreePan}
+        onRecenterCamera={handleRecenterCamera}
+        onFocusEntity={handleFocusEntity}
+        onNudgeCamera={handleNudgeCamera}
+        onLockDevMode={handleLockDevMode}
         zoom={hudZoom}
         activeEntities={activeEntitiesRef.current}
         selectedOriginId={selectedOriginId}

@@ -305,9 +305,9 @@ export const HUD: React.FC<HUDProps> = ({
                 ? 'bg-amber-500 text-slate-950 font-bold border-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.5)]'
                 : 'bg-amber-950/60 hover:bg-amber-800/50 border-amber-500/50 text-amber-300'
             }`}
-            title="Toggle Developer Inspector (` key)"
+            title="Open Developer Inspector (Password: DEVMODE)"
           >
-            DEV [ ` ]
+            DEV MODE
           </button>
 
           {/* ZOOM CONTROLS */}
