@@ -20,6 +20,13 @@ interface HUDProps {
   onRestartGame: () => void;
   onKeyDownAction: (code: string) => void;
   onKeyUpAction: (code: string) => void;
+  onToggleDevInspector: () => void;
+  isDevInspectorOpen: boolean;
+  currentSystem: string;
+  currentLocationName: string;
+  availableBubbles: { id: string; name: string; designation: string }[];
+  onAutopilotJump: (bubbleId: string) => void;
+  warpState: { phase: string; bannerText: string };
 }
 
 export const HUD: React.FC<HUDProps> = ({
@@ -41,6 +48,13 @@ export const HUD: React.FC<HUDProps> = ({
   onRestartGame,
   onKeyDownAction,
   onKeyUpAction,
+  onToggleDevInspector,
+  isDevInspectorOpen,
+  currentSystem,
+  currentLocationName,
+  availableBubbles,
+  onAutopilotJump,
+  warpState,
 }) => {
   const getCompassDir = (deg: number): string => {
     if (deg >= 337.5 || deg < 22.5) return 'N';
@@ -284,6 +298,17 @@ export const HUD: React.FC<HUDProps> = ({
           >
             Audio: {audioEnabled ? 'ON' : 'OFF'}
           </button>
+          <button
+            onClick={onToggleDevInspector}
+            className={`px-2 py-1 rounded transition text-[11px] font-mono cursor-pointer border ${
+              isDevInspectorOpen
+                ? 'bg-amber-500 text-slate-950 font-bold border-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.5)]'
+                : 'bg-amber-950/60 hover:bg-amber-800/50 border-amber-500/50 text-amber-300'
+            }`}
+            title="Toggle Developer Inspector (` key)"
+          >
+            DEV [ ` ]
+          </button>
 
           {/* ZOOM CONTROLS */}
           <div className="flex items-center gap-1 border-l border-cyan-500/30 pl-2">
@@ -309,6 +334,35 @@ export const HUD: React.FC<HUDProps> = ({
             >
               +
             </button>
+          </div>
+        </div>
+
+        {/* AUTOPILOT NAVIGATION BAR */}
+        <div className="hud-panel px-3 py-1.5 rounded-lg flex items-center gap-2 text-xs pointer-events-auto">
+          <div className="flex items-center gap-1 text-[10px] text-cyan-400 font-mono">
+            <span className="text-slate-400 uppercase font-sans">LOCATION:</span>
+            <span className="font-bold text-slate-200">{currentLocationName}</span>
+          </div>
+          <span className="text-slate-600">·</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-slate-400">AUTOPILOT:</span>
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) {
+                  onAutopilotJump(e.target.value);
+                }
+              }}
+              disabled={warpState.phase !== 'idle'}
+              className="bg-slate-950/90 border border-cyan-500/40 rounded px-2 py-0.5 text-[11px] text-cyan-300 font-mono focus:outline-none focus:border-cyan-400 cursor-pointer disabled:opacity-50"
+            >
+              <option value="">Jump destination...</option>
+              {availableBubbles.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name} ({b.designation})
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -408,6 +462,26 @@ export const HUD: React.FC<HUDProps> = ({
           <div className="px-4 py-1.5 rounded-full bg-red-950/90 border border-red-500/90 shadow-[0_0_20px_rgba(255,40,0,0.6)] flex items-center gap-2.5 text-xs font-mono font-bold tracking-widest text-red-200 animate-pulse">
             <span className="inline-block w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_#ff0000]" />
             <span>WEAPONS OVERHEATED: SYSTEM LOCKOUT ({(telemetry.overheatRemainingSec ?? 3.0).toFixed(1)}s)</span>
+          </div>
+        </div>
+      )}
+
+      {/* AUTOPILOT WARP SEQUENCE BANNER */}
+      {warpState.phase !== 'idle' && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 pointer-events-none z-30 select-none">
+          <div className={`px-6 py-2.5 rounded-lg border shadow-2xl flex flex-col items-center gap-1 font-mono tracking-widest text-center ${
+            warpState.phase === 'spooling'
+              ? 'bg-amber-950/90 border-amber-500/80 text-amber-300 shadow-[0_0_25px_rgba(245,158,11,0.5)] animate-pulse'
+              : warpState.phase === 'warp'
+              ? 'bg-cyan-950/95 border-cyan-400 text-cyan-200 shadow-[0_0_35px_rgba(0,240,255,0.7)]'
+              : 'bg-emerald-950/90 border-emerald-400 text-emerald-200 shadow-[0_0_25px_rgba(16,185,129,0.5)]'
+          }`}>
+            <span className="text-xs uppercase font-bold text-slate-400">
+              {warpState.phase === 'spooling' ? 'SUB-LIGHT WARP SPOOL' : warpState.phase === 'warp' ? 'HYPERSPACE TRANSIT' : 'SECTOR DROP'}
+            </span>
+            <span className="text-base font-bold text-white tracking-widest drop-shadow">
+              {warpState.bannerText}
+            </span>
           </div>
         </div>
       )}

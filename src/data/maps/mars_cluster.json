@@ -1,0 +1,76 @@
+{
+  "id": "mars_cluster",
+  "name": "Mars Frontier Cluster",
+  "systemId": "sol_system",
+  "systemName": "Sol System",
+  "designation": "GRID 14-M // ORE FIELDS",
+  "description": "High-density resource mining belt administered by frontier drilling syndicates and industrial refineries.",
+  "worldSize": 100000,
+  "spawnPosition": {
+    "x": 14200,
+    "y": -8000,
+    "angle": -1.57
+  },
+  "instances": [
+    {
+      "id": "mining_outpost_delta",
+      "typeId": "mining_station_v1",
+      "position": { "x": 14500, "y": -8200 }
+    },
+    {
+      "id": "defense_sentry_alpha",
+      "typeId": "defense_platform_v1",
+      "position": { "x": 13700, "y": -7600 }
+    },
+    {
+      "id": "defense_sentry_beta",
+      "typeId": "defense_platform_v1",
+      "position": { "x": 15300, "y": -8900 }
+    },
+    {
+      "id": "mars_nav_buoy_01",
+      "typeId": "nav_buoy_v1",
+      "position": { "x": 14100, "y": -8500 }
+    },
+    {
+      "id": "heavy_ore_rock_01",
+      "typeId": "asteroid_iron_large",
+      "position": { "x": 15700, "y": -7400 }
+    },
+    {
+      "id": "heavy_ore_rock_02",
+      "typeId": "asteroid_iron_medium",
+      "position": { "x": 13300, "y": -9200 }
+    },
+    {
+      "id": "heavy_ore_rock_03",
+      "typeId": "asteroid_iron_large",
+      "position": { "x": 16100, "y": -8800 }
+    },
+    {
+      "id": "ore_fragment_01",
+      "typeId": "asteroid_rock_small_a",
+      "position": { "x": 14800, "y": -7600 }
+    },
+    {
+      "id": "ore_fragment_02",
+      "typeId": "asteroid_rock_small_b",
+      "position": { "x": 13900, "y": -8900 }
+    },
+    {
+      "id": "patrol_drone_01",
+      "typeId": "target_drone_v1",
+      "position": { "x": 14000, "y": -7800 }
+    },
+    {
+      "id": "patrol_drone_02",
+      "typeId": "target_drone_v1",
+      "position": { "x": 15000, "y": -8600 }
+    },
+    {
+      "id": "marauder_scout_01",
+      "typeId": "hostile_interceptor_v1",
+      "position": { "x": 16600, "y": -6900 }
+    }
+  ]
+}

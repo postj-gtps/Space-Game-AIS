@@ -1,0 +1,66 @@
+{
+  "id": "sol_hub",
+  "name": "Starport Valiant-Prime Hub",
+  "systemId": "sol_system",
+  "systemName": "Sol System",
+  "designation": "GRID 00-A // ORBITAL STATION",
+  "description": "Primary orbital logistics station orbiting Terra-Luna, equipped with ship docks, trading exchange, and mission terminals.",
+  "worldSize": 100000,
+  "spawnPosition": {
+    "x": 0,
+    "y": 0,
+    "angle": -1.57
+  },
+  "instances": [
+    {
+      "id": "station_valiant_prime",
+      "typeId": "base_station_v1",
+      "position": { "x": 0, "y": 350 }
+    },
+    {
+      "id": "perimeter_defense_01",
+      "typeId": "defense_platform_v1",
+      "position": { "x": -1800, "y": 350 }
+    },
+    {
+      "id": "perimeter_defense_02",
+      "typeId": "defense_platform_v1",
+      "position": { "x": 1800, "y": 350 }
+    },
+    {
+      "id": "sol_nav_buoy_entry",
+      "typeId": "nav_buoy_v1",
+      "position": { "x": 0, "y": -900 }
+    },
+    {
+      "id": "sol_asteroid_alpha",
+      "typeId": "asteroid_iron_large",
+      "position": { "x": 2200, "y": -1500 }
+    },
+    {
+      "id": "sol_asteroid_beta",
+      "typeId": "asteroid_iron_medium",
+      "position": { "x": -2100, "y": 1800 }
+    },
+    {
+      "id": "sol_asteroid_gamma",
+      "typeId": "asteroid_rock_small_a",
+      "position": { "x": -1500, "y": -2200 }
+    },
+    {
+      "id": "sol_asteroid_delta",
+      "typeId": "asteroid_rock_small_b",
+      "position": { "x": 1900, "y": 2400 }
+    },
+    {
+      "id": "station_courier_drone",
+      "typeId": "target_drone_v1",
+      "position": { "x": 300, "y": -200 }
+    },
+    {
+      "id": "orbital_patrol_drone_2",
+      "typeId": "target_drone_v1",
+      "position": { "x": -600, "y": 800 }
+    }
+  ]
+}

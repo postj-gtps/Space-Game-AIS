@@ -221,3 +221,75 @@ export interface ActiveEntityContainer {
   dynamicEntities: IDynamicEntity[];
   transientEntities: ITransientEntity[];
 }
+
+/**
+ * Decoupled Blueprint Schema (/src/data/blueprints/entities.json)
+ */
+export interface EntityBlueprint {
+  typeId: string;
+  displayName: string;
+  category?: 'station' | 'defense' | 'beacon' | 'asteroid' | 'drone' | 'hostile' | 'unknown' | string;
+  spriteAsset: string;
+  collisionRadius: number;
+  dockable: boolean;
+  services: string[];
+  scale?: number;
+  rotSpeed?: number;
+  description?: string;
+}
+
+/**
+ * Lightweight Map Instance Placement Schema (/src/data/maps/*.json)
+ */
+export interface InstancePlacement {
+  id: string;
+  typeId: string;
+  position: {
+    x: number;
+    y: number;
+  };
+}
+
+/**
+ * Declarative Map Bubble File Schema
+ */
+export interface MapBubbleFile {
+  id: string;
+  name: string;
+  systemId: string;
+  systemName: string;
+  designation: string;
+  description: string;
+  worldSize: number;
+  spawnPosition: {
+    x: number;
+    y: number;
+    angle?: number;
+  };
+  instances: InstancePlacement[];
+}
+
+/**
+ * Starter Ship Configuration Schema (/src/data/ships/starter_ship.json)
+ */
+export interface StarterShipConfig {
+  id: string;
+  name: string;
+  displayName: string;
+  class?: string;
+  description?: string;
+  maxSpeed: number;
+  thrustPower: number;
+  reverseThrustPower?: number;
+  rotationSpeed?: number;
+  maxShields?: number;
+  maxHull?: number;
+  collisionRadius?: number;
+  spriteAsset?: string;
+  scale?: number;
+  rotationOffset?: number;
+  crewCapacity?: number;
+  cargoCapacity?: number;
+  startingWeapons?: string[];
+}
+

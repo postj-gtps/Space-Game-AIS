@@ -28,6 +28,7 @@ export class AssetManager {
   public static droneImage: HTMLImageElement | null = null;
   public static hostileDroneImage: HTMLImageElement | null = null;
   public static baseStationImage: HTMLImageElement | null = null;
+  public static miningStationImage: HTMLImageElement | null = null;
   public static largeAsteroidImage: HTMLImageElement | null = null;
   public static mediumAsteroidImage: HTMLImageElement | null = null;
   public static smallRockImages: HTMLImageElement[] = [];
@@ -395,6 +396,24 @@ export class AssetManager {
       })
     );
 
+    // Preload Mining Station sprite
+    const miningStationImg = new Image();
+    const primaryMiningStationSrc = resolveAssetPath('assets/images/stations/Mining Station.png');
+    miningStationImg.src = primaryMiningStationSrc;
+    this.miningStationImage = miningStationImg;
+
+    loadPromises.push(
+      new Promise((resolve) => {
+        miningStationImg.onload = () => resolve();
+        miningStationImg.onerror = () => {
+          console.warn(`Primary mining station texture failed at ${primaryMiningStationSrc}. Attempting fallback.`);
+          miningStationImg.src = defaultBaseStationImg;
+          miningStationImg.onload = () => resolve();
+          miningStationImg.onerror = () => resolve();
+        };
+      })
+    );
+
     // Helper for loading textures with bundled and encoded fallbacks
     const preloadTexture = (
       relativePath: string,
@@ -503,6 +522,31 @@ export class AssetManager {
 
   public static getBaseStationImage(): HTMLImageElement | null {
     return this.baseStationImage;
+  }
+
+  public static getMiningStationImage(): HTMLImageElement | null {
+    return this.miningStationImage || this.baseStationImage;
+  }
+
+  public static getImage(src: string): HTMLImageElement | null {
+    if (!src) return null;
+    if (this.loadedImages[src]) return this.loadedImages[src];
+    if (src.includes('Mining Station')) return this.getMiningStationImage();
+    if (src.includes('Base Station')) return this.getBaseStationImage();
+    if (src.includes('Large Asteroid')) return this.getLargeAsteroidImage();
+    if (src.includes('Medium Asteroid')) return this.getMediumAsteroidImage();
+    if (src.includes('Small Rock A')) return this.getSmallRockImage(0);
+    if (src.includes('Small Rock B')) return this.getSmallRockImage(1);
+    if (src.includes('Small Rock C')) return this.getSmallRockImage(2);
+    if (src.includes('Small Rock D')) return this.getSmallRockImage(3);
+    if (src.includes('Enemy Drone')) return this.getDroneImage();
+    if (src.includes('Hostile Drone')) return this.getHostileDroneImage();
+
+    // Dynamically load and cache
+    const img = new Image();
+    img.src = resolveAssetPath(src);
+    this.loadedImages[src] = img;
+    return img;
   }
 
   public static getLargeAsteroidImage(): HTMLImageElement | null {

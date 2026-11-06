@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { TelemetryData } from './types/game';
 import { AssetManager } from './game/assets';
 import { SoundEngine } from './game/sound';
@@ -6,21 +6,29 @@ import {
   CONFIG,
   PlayerShip,
   LaserProjectile,
-  Asteroid,
-  TargetDrone,
-  HostileDrone,
-  BaseStation,
   ParticleSystem,
   Starfield,
   NebulaRenderer,
   drawSectorGrid,
   InputState,
-  ActiveBubbleSession,
 } from './game/engine';
-import { UniverseManager } from './data/universeData';
-import { CurrentLocationState } from './types/universe';
+import {
+  loadMapBubble,
+  getAvailableMapBubbles,
+  RuntimeMapEntity,
+  STARTER_SHIP_CONFIG,
+} from './game/mapLoader';
+import { MapBubbleFile, InstancePlacement } from './types/universe';
 import { HUD } from './components/HUD';
 import { StationModal } from './components/StationModal';
+import { DevInspector } from './components/DevInspector';
+
+export interface WarpState {
+  phase: 'idle' | 'spooling' | 'warp' | 'drop';
+  targetBubbleId: string | null;
+  bannerText: string;
+  progress: number;
+}
 
 export const App: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -33,13 +41,39 @@ export const App: React.FC = () => {
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [activeShipId, setActiveShipId] = useState<string>('starter_ship');
 
+  // --- Map Bubble & System Traversal State ---
+  const [currentSystem, setCurrentSystem] = useState<string>('Sol System');
+  const [currentLocation, setCurrentLocation] = useState<string>('sol_hub');
+  const [activeMapFile, setActiveMapFile] = useState<MapBubbleFile>(() => loadMapBubble('sol_hub').mapData);
+
+  // Unified Runtime Entities Collection
+  const activeEntitiesRef = useRef<RuntimeMapEntity[]>([]);
+  const [activeEntitiesCount, setActiveEntitiesCount] = useState<number>(0);
+
+  // Warp State for Autopilot Traversal
+  const [warpState, setWarpState] = useState<WarpState>({
+    phase: 'idle',
+    targetBubbleId: null,
+    bannerText: '',
+    progress: 0,
+  });
+  const warpStateRef = useRef<WarpState>(warpState);
+  warpStateRef.current = warpState;
+
+  // --- Developer Inspector State ---
+  const [isDevInspectorOpen, setIsDevInspectorOpen] = useState<boolean>(false);
+  const [selectedOriginId, setSelectedOriginId] = useState<string | null>(null);
+  const [clickedWorldPos, setClickedWorldPos] = useState<{ x: number; y: number } | null>(null);
+  const [cursorWorldPos, setCursorWorldPos] = useState<{ x: number; y: number } | null>(null);
+
+  // Telemetry HUD State
   const [telemetry, setTelemetry] = useState<TelemetryData>({
-    shipName: 'STARLIGHT SCOUT',
+    shipName: STARTER_SHIP_CONFIG.name || 'STARLIGHT SCOUT',
     fps: 60,
     speed: 0,
     headingDeg: 0,
     coordX: 0,
-    coordY: 3,
+    coordY: 0,
     thrustStatus: 'DOCKED [STATION]',
     heatPct: 0,
     shieldPct: 100,
@@ -49,25 +83,17 @@ export const App: React.FC = () => {
 
   const [isDocked, setIsDocked] = useState(true);
   const isDockedRef = useRef(true);
+  const [currentDockedEntity, setCurrentDockedEntity] = useState<RuntimeMapEntity | null>(null);
 
-  // Active Galactic Spatial Hierarchy Location
-  const [currentLocation, setCurrentLocation] = useState<CurrentLocationState>(() =>
-    UniverseManager.getCurrentLocationState()
-  );
-  const activeBubble = UniverseManager.getActiveBubble();
-
-  // Keep references to game engine instances
+  // Engine Subsystems Refs
   const soundEngineRef = useRef<SoundEngine>(new SoundEngine());
-  const playerRef = useRef<PlayerShip>(new PlayerShip(activeBubble.spawnPosition.x, activeBubble.spawnPosition.y));
-  const baseStationRef = useRef<BaseStation>(new BaseStation(0, 350));
-  const bubbleSessionRef = useRef<ActiveBubbleSession>(new ActiveBubbleSession(activeBubble, playerRef.current));
+  const playerRef = useRef<PlayerShip>(
+    new PlayerShip(activeMapFile.spawnPosition.x, activeMapFile.spawnPosition.y)
+  );
   const starfieldRef = useRef<Starfield>(new Starfield(350));
-  const nebulaRef = useRef<NebulaRenderer>(new NebulaRenderer(activeBubble.nebulae));
+  const nebulaRef = useRef<NebulaRenderer>(new NebulaRenderer([]));
   const particleSystemRef = useRef<ParticleSystem>(new ParticleSystem());
   const projectilesRef = useRef<LaserProjectile[]>([]);
-  const asteroidsRef = useRef<Asteroid[]>([]);
-  const dronesRef = useRef<TargetDrone[]>([]);
-  const hostileDronesRef = useRef<HostileDrone[]>([]);
   const keysRef = useRef<InputState>({
     forward: false,
     reverse: false,
@@ -80,15 +106,14 @@ export const App: React.FC = () => {
   const shakeMagnitudeRef = useRef<number>(0);
 
   // Viewport Zoom System
-  // Outer limit: 0.035 (~3.4px dot). Inner limit: ship fills the viewport (~8-10x)
   const zoomRef = useRef<number>(1.0);
   const targetZoomRef = useRef<number>(1.0);
   const [hudZoom, setHudZoom] = useState<number>(1.0);
 
   const getZoomLimits = useCallback(() => {
     const minDim = Math.min(window.innerWidth || 800, window.innerHeight || 600);
-    const minZoom = 0.035; // Ship is just a dot
-    const maxZoom = Math.max(5.0, (minDim * 0.88) / 95); // Ship fills the screen
+    const minZoom = 0.035;
+    const maxZoom = Math.max(5.0, (minDim * 0.88) / 95);
     return { minZoom, maxZoom };
   }, []);
 
@@ -119,6 +144,108 @@ export const App: React.FC = () => {
     shakeMagnitudeRef.current = magnitude;
   }, []);
 
+  const availableBubbles = useMemo(() => getAvailableMapBubbles(), []);
+
+  // --- Subroutine: Load Target Map Bubble ---
+  const mountMapBubble = useCallback(
+    (bubbleId: string, repositionPlayer = true) => {
+      const { mapData, activeEntities } = loadMapBubble(bubbleId);
+      setActiveMapFile(mapData);
+      setCurrentLocation(mapData.id);
+      setCurrentSystem(mapData.systemName || 'Sol System');
+      activeEntitiesRef.current = activeEntities;
+      setActiveEntitiesCount(activeEntities.length);
+      CONFIG.worldSize = mapData.worldSize || 100000;
+
+      // Select default origin entity for Dev Inspector ruler
+      const stationEnt = activeEntities.find((e) => e.dockable) || activeEntities[0];
+      if (stationEnt) {
+        setSelectedOriginId(stationEnt.id);
+      }
+
+      if (repositionPlayer) {
+        const player = playerRef.current;
+        player.reset();
+        player.x = mapData.spawnPosition.x;
+        player.y = mapData.spawnPosition.y;
+        if (mapData.spawnPosition.angle !== undefined) {
+          player.angle = mapData.spawnPosition.angle;
+        }
+        player.dockingGraceTimer = 3.0;
+        player.invulnerableTimer = 180;
+      }
+    },
+    []
+  );
+
+  // --- Autopilot Sublight Warp Traversal State Transition ---
+  const handleAutopilotJump = useCallback(
+    (targetBubbleId: string) => {
+      if (warpStateRef.current.phase !== 'idle') return;
+      if (targetBubbleId === currentLocation) return;
+
+      const targetBubble = availableBubbles.find((b) => b.id === targetBubbleId);
+      const targetName = targetBubble?.name || targetBubbleId;
+
+      // If currently docked, disengage clamps
+      if (isDockedRef.current) {
+        isDockedRef.current = false;
+        setIsDocked(false);
+      }
+
+      const soundEngine = soundEngineRef.current;
+      soundEngine.init();
+      soundEngine.playWarpSpool();
+      triggerScreenShake(12, 6);
+
+      // Phase 1: Spooling (0.6s)
+      setWarpState({
+        phase: 'spooling',
+        targetBubbleId,
+        bannerText: `WARP DRIVE SPOOLING // TARGET: ${targetName.toUpperCase()}`,
+        progress: 0.1,
+      });
+
+      // Phase 2: Warp Hyperspace Transit (1.2s)
+      setTimeout(() => {
+        soundEngine.playWarpJump();
+        triggerScreenShake(20, 10);
+        setWarpState({
+          phase: 'warp',
+          targetBubbleId,
+          bannerText: `HYPERSPACE TRANSIT // DISPLACING SECTOR`,
+          progress: 0.5,
+        });
+
+        // Unload previous bubble's entity array and load target bubble
+        mountMapBubble(targetBubbleId, true);
+
+        // Phase 3: Sector Drop & Deceleration (0.7s)
+        setTimeout(() => {
+          soundEngine.playWarpDrop();
+          triggerScreenShake(10, 5);
+          setWarpState({
+            phase: 'drop',
+            targetBubbleId,
+            bannerText: `ARRIVED AT ${targetName.toUpperCase()}`,
+            progress: 1.0,
+          });
+
+          // Return to idle
+          setTimeout(() => {
+            setWarpState({
+              phase: 'idle',
+              targetBubbleId: null,
+              bannerText: '',
+              progress: 0,
+            });
+          }, 700);
+        }, 1200);
+      }, 600);
+    },
+    [currentLocation, availableBubbles, mountMapBubble, triggerScreenShake]
+  );
+
   const handleStartGame = useCallback(() => {
     soundEngineRef.current.init();
     setGameStarted(true);
@@ -128,25 +255,27 @@ export const App: React.FC = () => {
     isDockedRef.current = false;
     setIsDocked(false);
     const player = playerRef.current;
-    const baseStation = baseStationRef.current;
     soundEngineRef.current.playUndocking();
 
-    // Calculate angle outward from station center to player
-    let angle = Math.atan2(player.y - baseStation.y, player.x - baseStation.x);
-    if (Math.hypot(player.x - baseStation.x, player.y - baseStation.y) < 5) {
-      angle = -Math.PI / 2; // Default facing space upward
+    const station = currentDockedEntity || activeEntitiesRef.current.find((e) => e.dockable);
+    const stX = station ? station.x : 0;
+    const stY = station ? station.y : 350;
+    const stRadius = station ? station.radius : 430;
+
+    let angle = Math.atan2(player.y - stY, player.x - stX);
+    if (Math.hypot(player.x - stX, player.y - stY) < 5) {
+      angle = -Math.PI / 2;
     }
 
-    // Place player safely outside station perimeter
-    const spawnDist = baseStation.radius + 85;
-    player.x = baseStation.x + Math.cos(angle) * spawnDist;
-    player.y = baseStation.y + Math.sin(angle) * spawnDist;
+    const spawnDist = stRadius + 85;
+    player.x = stX + Math.cos(angle) * spawnDist;
+    player.y = stY + Math.sin(angle) * spawnDist;
     player.angle = angle;
     player.vx = Math.cos(angle) * 2.2;
     player.vy = Math.sin(angle) * 2.2;
-    player.dockingGraceTimer = 3.5; // 3.5 second collision grace
+    player.dockingGraceTimer = 3.5;
     player.invulnerableTimer = 180;
-  }, []);
+  }, [currentDockedEntity]);
 
   const handleSelectShip = useCallback((shipId: string) => {
     setActiveShipId(shipId);
@@ -158,10 +287,10 @@ export const App: React.FC = () => {
     setIsDocked(true);
     setGameOver(false);
     playerRef.current.reset();
-    playerRef.current.x = 0;
-    playerRef.current.y = 350;
+    playerRef.current.x = activeMapFile.spawnPosition.x;
+    playerRef.current.y = activeMapFile.spawnPosition.y;
     playerRef.current.setShip(activeShipId);
-  }, [activeShipId]);
+  }, [activeShipId, activeMapFile]);
 
   const handleToggleGrid = useCallback(() => {
     setShowGrid((prev) => !prev);
@@ -179,11 +308,31 @@ export const App: React.FC = () => {
     });
   }, []);
 
+  const handleToggleDevInspector = useCallback(() => {
+    setIsDevInspectorOpen((prev) => !prev);
+  }, []);
+
+  // Quick live entity insertion from Dev Inspector
+  const handleQuickAddEntity = useCallback((instance: InstancePlacement) => {
+    const { mapData } = loadMapBubble(activeMapFile.id);
+    mapData.instances.push(instance);
+    const { activeEntities } = loadMapBubble(activeMapFile.id);
+    activeEntitiesRef.current = activeEntities;
+    setActiveEntitiesCount(activeEntities.length);
+  }, [activeMapFile.id]);
+
+  // Keyboard controls
   const handleKeyDownAction = useCallback(
     (code: string) => {
       soundEngineRef.current.init();
       const keys = keysRef.current;
       const player = playerRef.current;
+
+      // Dev Inspector hotkey toggle: Backquote (` or ~)
+      if (code === 'Backquote') {
+        setIsDevInspectorOpen((prev) => !prev);
+        return;
+      }
 
       if (isDockedRef.current) {
         if (code === 'Digit5' || code === 'Numpad5' || code === 'Escape') {
@@ -259,43 +408,81 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  // Initialize Entities from Active Map Bubble (Micro Space)
-  useEffect(() => {
-    const bubble = UniverseManager.getActiveBubble();
-    const session = bubbleSessionRef.current;
-    session.loadFromBubble(bubble, false);
+  // --- Canvas Coordinate Transformer on Click and Move ---
+  const handleCanvasClick = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-    asteroidsRef.current = session.asteroids;
-    dronesRef.current = session.drones;
-    hostileDronesRef.current = session.hostileDrones;
-    baseStationRef.current = session.baseStation;
-    projectilesRef.current = session.projectiles;
-    setCurrentLocation(UniverseManager.getCurrentLocationState());
-  }, []);
+      const rect = canvas.getBoundingClientRect();
+      const screenX = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const screenY = (e.clientY - rect.top) * (canvas.height / rect.height);
+      const player = playerRef.current;
+      const currentZoom = zoomRef.current;
 
-  // Window resize & keyboard listeners
+      // Coordinate Transformer: Screen pixel -> World coordinates
+      const worldX = player.x + (screenX - canvas.width / 2) / currentZoom;
+      const worldY = player.y + (screenY - canvas.height / 2) / currentZoom;
+
+      setClickedWorldPos({ x: worldX, y: worldY });
+
+      // Check if click selected an entity in the scene
+      const clickedEntity = activeEntitiesRef.current.find((ent) => {
+        const d = Math.hypot(ent.x - worldX, ent.y - worldY);
+        return d <= ent.radius + 30 / currentZoom;
+      });
+
+      if (clickedEntity) {
+        setSelectedOriginId(clickedEntity.id);
+      }
+    },
+    []
+  );
+
+  const handleCanvasMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const screenX = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const screenY = (e.clientY - rect.top) * (canvas.height / rect.height);
+      const player = playerRef.current;
+      const currentZoom = zoomRef.current;
+
+      const worldX = player.x + (screenX - canvas.width / 2) / currentZoom;
+      const worldY = player.y + (screenY - canvas.height / 2) / currentZoom;
+
+      setCursorWorldPos({ x: worldX, y: worldY });
+    },
+    []
+  );
+
+  // Resize and keyboard listeners
   useEffect(() => {
     const handleResize = () => {
       const canvas = canvasRef.current;
-      if (!canvas) return;
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      if (canvas) {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
     };
 
-    window.addEventListener('resize', handleResize);
     handleResize();
+    window.addEventListener('resize', handleResize);
 
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.repeat) return;
-      if (isDockedRef.current) {
-        // While docked in station concourse/dealer, StationModal handles keyboard navigation
+      // Don't intercept typing in inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
         return;
       }
-      if (e.code === 'Space') e.preventDefault();
       handleKeyDownAction(e.code);
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+        return;
+      }
       handleKeyUpAction(e.code);
     };
 
@@ -314,52 +501,20 @@ export const App: React.FC = () => {
       canvas.addEventListener('wheel', onWheel, { passive: false });
     }
 
-    // Touch Pinch-to-Zoom
-    let initialPinchDist: number | null = null;
-    let initialZoom = 1.0;
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        initialPinchDist = Math.hypot(dx, dy);
-        initialZoom = targetZoomRef.current;
-      }
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 2 && initialPinchDist) {
-        e.preventDefault();
-        const dx = e.touches[0].clientX - e.touches[1].clientX;
-        const dy = e.touches[0].clientY - e.touches[1].clientY;
-        const dist = Math.hypot(dx, dy);
-        const ratio = dist / initialPinchDist;
-        adjustTargetZoom(initialZoom * ratio);
-      }
-    };
-
-    const onTouchEnd = () => {
-      initialPinchDist = null;
-    };
-
-    if (canvas) {
-      canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-      canvas.addEventListener('touchmove', onTouchMove, { passive: false });
-      canvas.addEventListener('touchend', onTouchEnd);
-    }
-
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       if (canvas) {
         canvas.removeEventListener('wheel', onWheel);
-        canvas.removeEventListener('touchstart', onTouchStart);
-        canvas.removeEventListener('touchmove', onTouchMove);
-        canvas.removeEventListener('touchend', onTouchEnd);
       }
     };
   }, [handleKeyDownAction, handleKeyUpAction, adjustTargetZoom]);
+
+  // Initial Map Load
+  useEffect(() => {
+    mountMapBubble('sol_hub', false);
+  }, [mountMapBubble]);
 
   // Main game loop effect
   useEffect(() => {
@@ -369,19 +524,6 @@ export const App: React.FC = () => {
 
     const initCatalogAndStart = async () => {
       await AssetManager.init();
-      const activeBubble = UniverseManager.getActiveBubble();
-      bubbleSessionRef.current.loadFromBubble(activeBubble, false);
-      asteroidsRef.current = bubbleSessionRef.current.asteroids;
-      dronesRef.current = bubbleSessionRef.current.drones;
-      hostileDronesRef.current = bubbleSessionRef.current.hostileDrones;
-      baseStationRef.current = bubbleSessionRef.current.baseStation;
-      projectilesRef.current = bubbleSessionRef.current.projectiles;
-      if (activeBubble.nebulae) {
-        nebulaRef.current.setClouds(activeBubble.nebulae);
-      }
-      playerRef.current.reset();
-      playerRef.current.x = activeBubble.spawnPosition.x;
-      playerRef.current.y = activeBubble.spawnPosition.y;
 
       const loop = (currentTime: number) => {
         const deltaTime = (currentTime - lastTime) / 1000;
@@ -405,44 +547,24 @@ export const App: React.FC = () => {
         const soundEngine = soundEngineRef.current;
         const particleSystem = particleSystemRef.current;
         const projectiles = projectilesRef.current;
-        const asteroids = asteroidsRef.current;
-        const drones = dronesRef.current;
-        const hostileDrones = hostileDronesRef.current;
         const starfield = starfieldRef.current;
         const nebula = nebulaRef.current;
         const keys = keysRef.current;
+        const activeEntities = activeEntitiesRef.current;
+        const currentWarp = warpStateRef.current;
 
-        const baseStation = baseStationRef.current;
-        baseStation.update();
-
-        // Check Docking Contact with Base Station
-        if (!player.isDead && !isDockedRef.current) {
-          if (baseStation.checkDocking(player)) {
-            player.vx = 0;
-            player.vy = 0;
-            keys.forward = false;
-            keys.reverse = false;
-            keys.left = false;
-            keys.right = false;
-            keys.fire = false;
-            isDockedRef.current = true;
-            setIsDocked(true);
-            soundEngine.playDockingClamp();
-            triggerScreenShake(6, 4);
-          }
-        }
-
-        // Player & Projectiles update
-        if (!isDockedRef.current) {
+        // Player & Projectiles update pass
+        if (!isDockedRef.current && currentWarp.phase !== 'warp') {
           player.update(deltaTime, keys, soundEngine, particleSystem, projectiles);
-        } else {
-          // Shore power while moored: replenish shields & dissipate heat (hull repairs reserved for Ship Dealer)
+        } else if (isDockedRef.current) {
+          // Shore power replenishing
           if (player.shields < player.config.stats.maxShields) {
             player.shields = Math.min(player.config.stats.maxShields, player.shields + 0.5);
           }
           player.laserHeat = Math.max(0, player.laserHeat - 0.8);
         }
 
+        // Projectile life ticks
         for (let i = projectiles.length - 1; i >= 0; i--) {
           projectiles[i].update(particleSystem);
           if (projectiles[i].life > projectiles[i].maxLife) {
@@ -450,271 +572,120 @@ export const App: React.FC = () => {
           }
         }
 
-        // Environment, Target Drones & Hostile Combat Drones update
-        for (const ast of asteroids) ast.update();
-        for (const drone of drones) drone.update(player);
-        for (const hd of hostileDrones) hd.update(player, soundEngine, particleSystem, projectiles);
-        particleSystem.update();
+        // --- Dynamic Physics Tick Pass over activeEntities ---
+        for (let i = activeEntities.length - 1; i >= 0; i--) {
+          const ent = activeEntities[i];
+          ent.update(deltaTime, player, soundEngine, particleSystem, projectiles);
+          if (ent.isDead) {
+            activeEntities.splice(i, 1);
+            continue;
+          }
 
-        // Check Collisions (suppressed while docked in station berth)
-        if (!player.isDead && !isDockedRef.current) {
-          const radius = player.config.stats.collisionRadius || 20;
-
-          // Player vs Asteroid
-          for (const ast of asteroids) {
-            const dist = Math.hypot(player.x - ast.x, player.y - ast.y);
-            if (dist < radius + ast.radius) {
-              const damage = ast.size === 3 ? 35 : ast.size === 2 ? 25 : 15;
-              player.takeDamage(
-                damage,
-                ast.x,
-                ast.y,
-                6,
-                soundEngine,
-                particleSystem,
-                triggerScreenShake,
-                () => setGameOver(true)
-              );
-
-              const bounceAngle = Math.atan2(ast.y - player.y, ast.x - player.x);
-              ast.vx += Math.cos(bounceAngle) * 3;
-              ast.vy += Math.sin(bounceAngle) * 3;
+          // Check Docking Contact with Station
+          if (!player.isDead && !isDockedRef.current && currentWarp.phase === 'idle') {
+            if (ent.checkDocking(player)) {
+              player.vx = 0;
+              player.vy = 0;
+              keys.forward = false;
+              keys.reverse = false;
+              keys.left = false;
+              keys.right = false;
+              keys.fire = false;
+              isDockedRef.current = true;
+              setIsDocked(true);
+              setCurrentDockedEntity(ent);
+              soundEngine.playDockingClamp();
+              triggerScreenShake(6, 4);
             }
           }
 
-          // Player vs Target Drone
-          for (const drone of drones) {
-            const dist = Math.hypot(player.x - drone.x, player.y - drone.y);
-            if (dist < radius + drone.radius) {
-              player.takeDamage(
-                30,
-                drone.x,
-                drone.y,
-                7,
-                soundEngine,
-                particleSystem,
-                triggerScreenShake,
-                () => setGameOver(true)
-              );
+          // Collision Checks: Player vs Entity
+          if (!player.isDead && !isDockedRef.current && currentWarp.phase === 'idle') {
+            const pRadius = player.config.stats.collisionRadius || 25;
+            const dist = Math.hypot(player.x - ent.x, player.y - ent.y);
 
-              const bounceAngle = Math.atan2(drone.y - player.y, drone.x - player.x);
-              drone.vx += Math.cos(bounceAngle) * 4;
-              drone.vy += Math.sin(bounceAngle) * 4;
+            if (dist < pRadius + ent.radius) {
+              if (ent.category === 'asteroid') {
+                player.takeDamage(
+                  25,
+                  ent.x,
+                  ent.y,
+                  6,
+                  soundEngine,
+                  particleSystem,
+                  triggerScreenShake,
+                  () => setGameOver(true)
+                );
+                const bounce = Math.atan2(ent.y - player.y, ent.x - player.x);
+                ent.vx += Math.cos(bounce) * 2.5;
+                ent.vy += Math.sin(bounce) * 2.5;
+              } else if (ent.category === 'drone' || ent.category === 'hostile') {
+                player.takeDamage(
+                  30,
+                  ent.x,
+                  ent.y,
+                  7,
+                  soundEngine,
+                  particleSystem,
+                  triggerScreenShake,
+                  () => setGameOver(true)
+                );
+                ent.takeDamage(2, player.x, player.y, soundEngine, particleSystem);
+              } else if (ent.category === 'defense' || ent.category === 'station' || ent.isFallback) {
+                // Gentle deflection from station hull or defense platform
+                const bounce = Math.atan2(player.y - ent.y, player.x - ent.x);
+                player.vx = Math.cos(bounce) * 3;
+                player.vy = Math.sin(bounce) * 3;
+              }
             }
           }
 
-          // Player vs Hostile Drone
-          for (const hd of hostileDrones) {
-            const dist = Math.hypot(player.x - hd.x, player.y - hd.y);
-            if (dist < radius + hd.radius) {
-              player.takeDamage(
-                30,
-                hd.x,
-                hd.y,
-                7,
-                soundEngine,
-                particleSystem,
-                triggerScreenShake,
-                () => setGameOver(true)
-              );
-
-              const bounceAngle = Math.atan2(hd.y - player.y, hd.x - player.x);
-              hd.vx += Math.cos(bounceAngle) * 4;
-              hd.vy += Math.sin(bounceAngle) * 4;
-            }
-          }
-        }
-
-        // Hostile Projectiles vs Player
-        if (!player.isDead && !isDockedRef.current) {
-          const pRadius = player.config.stats.collisionRadius || 20;
+          // Collision Checks: Projectiles vs Entity
           for (let pIdx = projectiles.length - 1; pIdx >= 0; pIdx--) {
             const proj = projectiles[pIdx];
-            if (!proj.isEnemy) continue;
+            if (!proj.active) continue;
 
-            const dist = Math.hypot(player.x - proj.x, player.y - proj.y);
-            if (dist < pRadius + proj.radius) {
-              player.takeDamage(
-                15,
-                proj.x,
-                proj.y,
-                4,
-                soundEngine,
-                particleSystem,
-                triggerScreenShake,
-                () => setGameOver(true)
-              );
-              particleSystem.emitExplosion(proj.x, proj.y, 12, '#00ffff');
-              projectiles.splice(pIdx, 1);
+            // Player projectiles vs non-station entities
+            if (!proj.isEnemy && ent.category !== 'station') {
+              const dist = Math.hypot(proj.x - ent.x, proj.y - ent.y);
+              if (dist < ent.radius + proj.radius) {
+                particleSystem.emitExplosion(proj.x, proj.y, 14, '#00ffff');
+                projectiles.splice(pIdx, 1);
+                ent.takeDamage(1, proj.x, proj.y, soundEngine, particleSystem);
+                break;
+              }
             }
-          }
-        }
 
-        // Projectiles vs Asteroids
-        for (let pIdx = projectiles.length - 1; pIdx >= 0; pIdx--) {
-          const proj = projectiles[pIdx];
-
-          for (let aIdx = asteroids.length - 1; aIdx >= 0; aIdx--) {
-            const ast = asteroids[aIdx];
-            const dist = Math.hypot(proj.x - ast.x, proj.y - ast.y);
-
-            if (dist < ast.radius + proj.radius) {
-              particleSystem.emitExplosion(proj.x, proj.y, 12, '#00ffff');
-              projectiles.splice(pIdx, 1);
-
-              if (ast.size > 1) {
-                const nextSize = ast.size - 1;
-                // Compute divergent impulse perpendicular to projectile trajectory
-                const projAngle = Math.atan2(proj.vy, proj.vx);
-                const perpAngle = projAngle + Math.PI / 2;
-                const spreadSpeed = 1.0 + Math.random() * 0.8;
-                const offsetDist = ast.radius * 0.45;
-
-                const v1x = ast.vx * 0.6 + Math.cos(perpAngle) * spreadSpeed + (Math.random() - 0.5) * 0.5;
-                const v1y = ast.vy * 0.6 + Math.sin(perpAngle) * spreadSpeed + (Math.random() - 0.5) * 0.5;
-                const a1 = new Asteroid(
-                  ast.x + Math.cos(perpAngle) * offsetDist,
-                  ast.y + Math.sin(perpAngle) * offsetDist,
-                  nextSize,
-                  Math.floor(Math.random() * 4),
-                  v1x,
-                  v1y
+            // Enemy projectiles vs Player
+            if (proj.isEnemy && !player.isDead && !isDockedRef.current) {
+              const pRadius = player.config.stats.collisionRadius || 25;
+              const dist = Math.hypot(player.x - proj.x, player.y - proj.y);
+              if (dist < pRadius + proj.radius) {
+                player.takeDamage(
+                  15,
+                  proj.x,
+                  proj.y,
+                  4,
+                  soundEngine,
+                  particleSystem,
+                  triggerScreenShake,
+                  () => setGameOver(true)
                 );
-
-                const v2x = ast.vx * 0.6 - Math.cos(perpAngle) * spreadSpeed + (Math.random() - 0.5) * 0.5;
-                const v2y = ast.vy * 0.6 - Math.sin(perpAngle) * spreadSpeed + (Math.random() - 0.5) * 0.5;
-                const a2 = new Asteroid(
-                  ast.x - Math.cos(perpAngle) * offsetDist,
-                  ast.y - Math.sin(perpAngle) * offsetDist,
-                  nextSize,
-                  Math.floor(Math.random() * 4),
-                  v2x,
-                  v2y
-                );
-
-                asteroids.push(a1, a2);
-                soundEngine.playHitSound();
-
-                // Emitted rock debris particles matching mineral tones
-                for (let k = 0; k < 14; k++) {
-                  particleSystem.emitSpark(
-                    ast.x + (Math.random() - 0.5) * ast.radius,
-                    ast.y + (Math.random() - 0.5) * ast.radius,
-                    ast.vx * 0.4 + (Math.random() - 0.5) * 3,
-                    ast.vy * 0.4 + (Math.random() - 0.5) * 3,
-                    k % 2 === 0 ? '#b0bdcb' : '#728193',
-                    18
-                  );
-                }
-              } else {
-                soundEngine.playExplosion(false);
-                for (let k = 0; k < 18; k++) {
-                  particleSystem.emitSpark(
-                    ast.x,
-                    ast.y,
-                    ast.vx * 0.3 + (Math.random() - 0.5) * 4,
-                    ast.vy * 0.3 + (Math.random() - 0.5) * 4,
-                    k % 2 === 0 ? '#b0bdcb' : '#ff9944',
-                    22
-                  );
-                }
+                particleSystem.emitExplosion(proj.x, proj.y, 12, '#ff3366');
+                projectiles.splice(pIdx, 1);
+                break;
               }
-
-              asteroids.splice(aIdx, 1);
-              break;
             }
           }
         }
 
-        // Replenish asteroid field over time if population drops
-        if (asteroids.length < CONFIG.maxAsteroids) {
-          if (Math.random() < 0.012) {
-            const spawnAngle = Math.random() * Math.PI * 2;
-            const spawnDist = 1400 + Math.random() * 2200;
-            asteroids.push(
-              new Asteroid(
-                player.x + Math.cos(spawnAngle) * spawnDist,
-                player.y + Math.sin(spawnAngle) * spawnDist,
-                3, // Spawn new large asteroid
-                Math.floor(Math.random() * 4)
-              )
-            );
-          }
-        }
-
-        // Player Projectiles vs Target Drones
-        for (let pIdx = projectiles.length - 1; pIdx >= 0; pIdx--) {
-          const proj = projectiles[pIdx];
-          if (proj.isEnemy) continue;
-
-          for (let dIdx = drones.length - 1; dIdx >= 0; dIdx--) {
-            const drone = drones[dIdx];
-            const dist = Math.hypot(proj.x - drone.x, proj.y - drone.y);
-
-            if (dist < drone.radius + proj.radius) {
-              drone.hp--;
-              particleSystem.emitExplosion(proj.x, proj.y, 15, '#ff3366');
-              projectiles.splice(pIdx, 1);
-
-              if (drone.hp <= 0) {
-                soundEngine.playExplosion(true);
-                particleSystem.emitExplosion(drone.x, drone.y, 40, '#ff9900');
-                drones.splice(dIdx, 1);
-
-                setTimeout(() => {
-                  const angle = Math.random() * Math.PI * 2;
-                  drones.push(
-                    new TargetDrone(player.x + Math.cos(angle) * 1200, player.y + Math.sin(angle) * 1200)
-                  );
-                }, 4000);
-              } else {
-                soundEngine.playHitSound();
-              }
-              break;
-            }
-          }
-        }
-
-        // Player Projectiles vs Hostile Drones
-        for (let pIdx = projectiles.length - 1; pIdx >= 0; pIdx--) {
-          const proj = projectiles[pIdx];
-          if (proj.isEnemy) continue;
-
-          for (let hdIdx = hostileDrones.length - 1; hdIdx >= 0; hdIdx--) {
-            const hd = hostileDrones[hdIdx];
-            const dist = Math.hypot(proj.x - hd.x, proj.y - hd.y);
-
-            if (dist < hd.radius + proj.radius) {
-              hd.hp--;
-              particleSystem.emitExplosion(proj.x, proj.y, 15, '#ff3366');
-              projectiles.splice(pIdx, 1);
-
-              if (hd.hp <= 0) {
-                soundEngine.playExplosion(true);
-                particleSystem.emitExplosion(hd.x, hd.y, 45, '#ff4400');
-                particleSystem.emitExplosion(hd.x, hd.y, 25, '#ffcc00');
-                hostileDrones.splice(hdIdx, 1);
-
-                setTimeout(() => {
-                  const angle = Math.random() * Math.PI * 2;
-                  const spawnDist = 900 + Math.random() * 1600;
-                  hostileDrones.push(
-                    new HostileDrone(player.x + Math.cos(angle) * spawnDist, player.y + Math.sin(angle) * spawnDist)
-                  );
-                }, 5000);
-              } else {
-                soundEngine.playHitSound();
-              }
-              break;
-            }
-          }
-        }
+        particleSystem.update();
 
         // Viewport Zoom Interpolation
         zoomRef.current += (targetZoomRef.current - zoomRef.current) * 0.15;
         const currentZoom = zoomRef.current;
 
-        // --- Render Main Viewport ---
+        // --- Dynamic Rendering Pass over activeEntities ---
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         starfield.draw(ctx, player.x, player.y, canvas.width, canvas.height);
 
@@ -734,137 +705,174 @@ export const App: React.FC = () => {
         nebula.draw(ctx, showNebula);
         drawSectorGrid(ctx, player.x, player.y, canvas.width / currentZoom, canvas.height / currentZoom, showGrid);
 
-        baseStation.draw(ctx);
-        for (const ast of asteroids) ast.draw(ctx);
-        for (const drone of drones) drone.draw(ctx);
-        for (const hd of hostileDrones) hd.draw(ctx);
+        // Render all entities in activeEntities dynamically
+        for (const ent of activeEntities) {
+          ent.draw(ctx);
+        }
+
+        // --- Flight Time Ruler Vector Guide Line ---
+        if (selectedOriginId) {
+          const origin = activeEntities.find((e) => e.id === selectedOriginId);
+          const target = cursorWorldPos || clickedWorldPos;
+          if (origin && target) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(origin.x, origin.y);
+            ctx.lineTo(target.x, target.y);
+            ctx.strokeStyle = '#00f0ff';
+            ctx.lineWidth = 1.8 / currentZoom;
+            ctx.setLineDash([8 / currentZoom, 6 / currentZoom]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Origin marker ring
+            ctx.beginPath();
+            ctx.arc(origin.x, origin.y, origin.radius + 15 / currentZoom, 0, Math.PI * 2);
+            ctx.strokeStyle = '#f59e0b';
+            ctx.lineWidth = 2 / currentZoom;
+            ctx.stroke();
+
+            // Target crosshair
+            const cr = 12 / currentZoom;
+            ctx.beginPath();
+            ctx.moveTo(target.x - cr, target.y);
+            ctx.lineTo(target.x + cr, target.y);
+            ctx.moveTo(target.x, target.y - cr);
+            ctx.lineTo(target.x, target.y + cr);
+            ctx.strokeStyle = '#00f0ff';
+            ctx.lineWidth = 1.5 / currentZoom;
+            ctx.stroke();
+
+            // Distance and Flight Time Label along the vector
+            const midX = (origin.x + target.x) / 2;
+            const midY = (origin.y + target.y) / 2;
+            const dist = Math.hypot(target.x - origin.x, target.y - origin.y);
+            const maxSpeed = STARTER_SHIP_CONFIG.maxSpeed || 7.0;
+            const timeSec = dist / (maxSpeed * 60);
+            const mins = Math.floor(timeSec / 60);
+            const secs = Math.floor(timeSec % 60);
+            const timeStr = `${mins.toString().padStart(2, '0')}m ${secs.toString().padStart(2, '0')}s`;
+
+            ctx.font = `${Math.max(11, 13 / currentZoom)}px monospace`;
+            ctx.fillStyle = '#07090e';
+            ctx.strokeStyle = '#00f0ff';
+            ctx.lineWidth = 1 / currentZoom;
+            const text = `${Math.round(dist).toLocaleString()}u · ${timeStr} @ ${maxSpeed.toFixed(1)} u/s`;
+            const textMetrics = ctx.measureText(text);
+            const pad = 6 / currentZoom;
+            ctx.fillRect(midX - textMetrics.width / 2 - pad, midY - 14 / currentZoom - pad, textMetrics.width + pad * 2, 20 / currentZoom + pad * 2);
+            ctx.strokeRect(midX - textMetrics.width / 2 - pad, midY - 14 / currentZoom - pad, textMetrics.width + pad * 2, 20 / currentZoom + pad * 2);
+            ctx.fillStyle = '#00f0ff';
+            ctx.fillText(text, midX - textMetrics.width / 2, midY + 2 / currentZoom);
+            ctx.restore();
+          }
+        }
+
+        // Render projectiles, particles, and player ship
         for (const proj of projectiles) proj.draw(ctx);
         particleSystem.draw(ctx);
         player.draw(ctx);
+
+        // --- Sublight Warp Jump Sequence Visual Distortion ---
+        if (currentWarp.phase === 'warp' || currentWarp.phase === 'spooling') {
+          ctx.save();
+          const numRays = currentWarp.phase === 'warp' ? 60 : 25;
+          const raySpeed = currentWarp.phase === 'warp' ? 800 : 200;
+          for (let r = 0; r < numRays; r++) {
+            const angle = (r / numRays) * Math.PI * 2 + (currentTime * 0.002);
+            const innerR = 40 + Math.random() * 80;
+            const outerR = innerR + raySpeed + Math.random() * 400;
+            ctx.beginPath();
+            ctx.moveTo(player.x + Math.cos(angle) * innerR, player.y + Math.sin(angle) * innerR);
+            ctx.lineTo(player.x + Math.cos(angle) * outerR, player.y + Math.sin(angle) * outerR);
+            ctx.strokeStyle = r % 2 === 0 ? 'rgba(0, 240, 255, 0.7)' : 'rgba(255, 255, 255, 0.85)';
+            ctx.lineWidth = (r % 3 === 0 ? 3 : 1.5) / currentZoom;
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
 
         ctx.restore();
 
         starfield.drawDust(ctx, player, canvas.width, canvas.height);
 
-        // --- Render Radar Minimap ---
+        // --- Dynamic Radar Minimap Pass over activeEntities ---
         if (radarCanvas) {
           const radarCtx = radarCanvas.getContext('2d');
           if (radarCtx) {
             const rWidth = radarCanvas.width;
             const rHeight = radarCanvas.height;
             const center = rWidth / 2;
-            const range = 2200;
+            const range = 2400;
 
             radarCtx.clearRect(0, 0, rWidth, rHeight);
 
+            // Radar range rings
             radarCtx.strokeStyle = 'rgba(0, 240, 255, 0.2)';
             radarCtx.lineWidth = 1;
             radarCtx.beginPath();
             radarCtx.arc(center, center, center * 0.4, 0, Math.PI * 2);
             radarCtx.stroke();
-
             radarCtx.beginPath();
             radarCtx.arc(center, center, center * 0.8, 0, Math.PI * 2);
             radarCtx.stroke();
 
-            // Base Station on Radar
-            const bsDx = baseStation.x - player.x;
-            const bsDy = baseStation.y - player.y;
-            const bsDist = Math.hypot(bsDx, bsDy);
+            // Render all activeEntities on Radar
+            for (const ent of activeEntities) {
+              const dx = ent.x - player.x;
+              const dy = ent.y - player.y;
+              const dist = Math.hypot(dx, dy);
 
-            if (bsDist < range) {
-              const rx = center + (bsDx / range) * center;
-              const ry = center + (bsDy / range) * center;
-              const pulse = Math.sin(currentTime * 0.005) * 1.5 + 6.5;
-
-              radarCtx.save();
-              radarCtx.strokeStyle = '#00f0ff';
-              radarCtx.lineWidth = 1.5;
-              radarCtx.beginPath();
-              radarCtx.arc(rx, ry, pulse, 0, Math.PI * 2);
-              radarCtx.stroke();
-
-              radarCtx.fillStyle = '#00f0ff';
-              radarCtx.beginPath();
-              radarCtx.arc(rx, ry, 3, 0, Math.PI * 2);
-              radarCtx.fill();
-
-              radarCtx.font = 'bold 8px monospace';
-              radarCtx.fillStyle = '#00f0ff';
-              radarCtx.textAlign = 'center';
-              radarCtx.fillText('BASE', rx, ry - 9);
-              radarCtx.restore();
-            } else {
-              // Directional waypoint pointer on radar outer rim
-              const angleToStation = Math.atan2(bsDy, bsDx);
-              const edgeR = center * 0.90;
-              const ex = center + Math.cos(angleToStation) * edgeR;
-              const ey = center + Math.sin(angleToStation) * edgeR;
-
-              radarCtx.save();
-              radarCtx.fillStyle = '#00f0ff';
-              radarCtx.beginPath();
-              radarCtx.arc(ex, ey, 3, 0, Math.PI * 2);
-              radarCtx.fill();
-
-              radarCtx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
-              radarCtx.lineWidth = 1;
-              radarCtx.beginPath();
-              radarCtx.moveTo(
-                center + Math.cos(angleToStation) * (center * 0.78),
-                center + Math.sin(angleToStation) * (center * 0.78)
-              );
-              radarCtx.lineTo(ex, ey);
-              radarCtx.stroke();
-              radarCtx.restore();
-            }
-
-            radarCtx.fillStyle = '#6688aa';
-            for (const ast of asteroids) {
-              const dx = ast.x - player.x;
-              const dy = ast.y - player.y;
-              if (Math.hypot(dx, dy) < range) {
+              if (dist < range) {
                 const rx = center + (dx / range) * center;
                 const ry = center + (dy / range) * center;
-                const dotSize = ast.size === 3 ? 3 : ast.size === 2 ? 2.2 : 1.5;
-                radarCtx.fillRect(rx - dotSize / 2, ry - dotSize / 2, dotSize, dotSize);
+
+                radarCtx.save();
+                radarCtx.fillStyle = ent.radarColor;
+                radarCtx.strokeStyle = ent.radarColor;
+
+                if (ent.category === 'station') {
+                  const pulse = Math.sin(currentTime * 0.005) * 1.5 + 6.5;
+                  radarCtx.lineWidth = 1.5;
+                  radarCtx.beginPath();
+                  radarCtx.arc(rx, ry, pulse, 0, Math.PI * 2);
+                  radarCtx.stroke();
+                  radarCtx.beginPath();
+                  radarCtx.arc(rx, ry, 3.5, 0, Math.PI * 2);
+                  radarCtx.fill();
+                  radarCtx.font = 'bold 8px monospace';
+                  radarCtx.textAlign = 'center';
+                  radarCtx.fillText(ent.radarLabel, rx, ry - 8);
+                } else if (ent.category === 'beacon') {
+                  radarCtx.beginPath();
+                  radarCtx.arc(rx, ry, 2.5, 0, Math.PI * 2);
+                  radarCtx.fill();
+                  radarCtx.font = '8px monospace';
+                  radarCtx.textAlign = 'center';
+                  radarCtx.fillText('BUOY', rx, ry - 5);
+                } else if (ent.category === 'hostile') {
+                  radarCtx.beginPath();
+                  radarCtx.moveTo(rx, ry - 3.5);
+                  radarCtx.lineTo(rx + 3.5, ry);
+                  radarCtx.lineTo(rx, ry + 3.5);
+                  radarCtx.lineTo(rx - 3.5, ry);
+                  radarCtx.closePath();
+                  radarCtx.fill();
+                } else if (ent.category === 'drone') {
+                  radarCtx.beginPath();
+                  radarCtx.arc(rx, ry, 2.2, 0, Math.PI * 2);
+                  radarCtx.fill();
+                } else if (ent.category === 'asteroid') {
+                  const sz = ent.radius > 60 ? 3 : 2;
+                  radarCtx.fillRect(rx - sz / 2, ry - sz / 2, sz, sz);
+                } else {
+                  radarCtx.fillRect(rx - 1.5, ry - 1.5, 3, 3);
+                }
+                radarCtx.restore();
               }
             }
 
-            radarCtx.fillStyle = '#ff3366';
-            for (const drone of drones) {
-              const dx = drone.x - player.x;
-              const dy = drone.y - player.y;
-              if (Math.hypot(dx, dy) < range) {
-                const rx = center + (dx / range) * center;
-                const ry = center + (dy / range) * center;
-                radarCtx.beginPath();
-                radarCtx.arc(rx, ry, 2.5, 0, Math.PI * 2);
-                radarCtx.fill();
-              }
-            }
-
-            // Hostile Drones on Radar (Distinct Diamond Blip)
-            radarCtx.fillStyle = '#ff1144';
-            radarCtx.strokeStyle = '#ffffff';
-            radarCtx.lineWidth = 1;
-            for (const hd of hostileDrones) {
-              const dx = hd.x - player.x;
-              const dy = hd.y - player.y;
-              if (Math.hypot(dx, dy) < range) {
-                const rx = center + (dx / range) * center;
-                const ry = center + (dy / range) * center;
-                radarCtx.beginPath();
-                radarCtx.moveTo(rx, ry - 3.5);
-                radarCtx.lineTo(rx + 3.5, ry);
-                radarCtx.lineTo(rx, ry + 3.5);
-                radarCtx.lineTo(rx - 3.5, ry);
-                radarCtx.closePath();
-                radarCtx.fill();
-                radarCtx.stroke();
-              }
-            }
-
+            // Player Ship Blip
             if (!player.isDead) {
               radarCtx.save();
               radarCtx.translate(center, center);
@@ -890,6 +898,7 @@ export const App: React.FC = () => {
         let thrustStatus: TelemetryData['thrustStatus'] = 'IDLE (DRIFT)';
         if (isDockedRef.current) thrustStatus = 'DOCKED [STATION]';
         else if (player.isDead) thrustStatus = 'OFFLINE';
+        else if (currentWarp.phase !== 'idle') thrustStatus = 'WARP TRANSIT';
         else if (keys.forward) thrustStatus = 'FORWARD [100%]';
         else if (keys.reverse) thrustStatus = 'REVERSE [RCS]';
 
@@ -932,14 +941,20 @@ export const App: React.FC = () => {
     return () => {
       cancelAnimationFrame(animId);
     };
-  }, [showGrid, showNebula, triggerScreenShake]);
+  }, [showGrid, showNebula, triggerScreenShake, cursorWorldPos, clickedWorldPos, selectedOriginId]);
 
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-black text-cyan-400 font-mono select-none">
       {/* Game Canvas Viewport */}
-      <canvas id="gameCanvas" ref={canvasRef} className="block w-full h-full bg-black cursor-crosshair" />
+      <canvas
+        id="gameCanvas"
+        ref={canvasRef}
+        onClick={handleCanvasClick}
+        onMouseMove={handleCanvasMouseMove}
+        className="block w-full h-full bg-black cursor-crosshair"
+      />
 
-      {/* Heads-Up Display */}
+      {/* Heads-Up Display with Dev Inspector & Autopilot Jump Trigger */}
       <HUD
         telemetry={telemetry}
         showGrid={showGrid}
@@ -959,6 +974,29 @@ export const App: React.FC = () => {
         onRestartGame={handleRestartGame}
         onKeyDownAction={handleKeyDownAction}
         onKeyUpAction={handleKeyUpAction}
+        onToggleDevInspector={handleToggleDevInspector}
+        isDevInspectorOpen={isDevInspectorOpen}
+        currentSystem={currentSystem}
+        currentLocationName={activeMapFile.name}
+        availableBubbles={availableBubbles}
+        onAutopilotJump={handleAutopilotJump}
+        warpState={warpState}
+      />
+
+      {/* In-Engine Developer Inspector Overlay */}
+      <DevInspector
+        isOpen={isDevInspectorOpen}
+        onClose={() => setIsDevInspectorOpen(false)}
+        playerPos={{ x: playerRef.current.x, y: playerRef.current.y }}
+        zoom={hudZoom}
+        activeEntities={activeEntitiesRef.current}
+        selectedOriginId={selectedOriginId}
+        onSelectOriginId={setSelectedOriginId}
+        clickedWorldPos={clickedWorldPos}
+        cursorWorldPos={cursorWorldPos}
+        currentLocation={activeMapFile.name}
+        currentSystem={currentSystem}
+        onQuickAddEntity={handleQuickAddEntity}
       />
 
       {/* Orbital Base Station Docking Concourse Terminal */}
@@ -966,7 +1004,7 @@ export const App: React.FC = () => {
         isOpen={isDocked}
         onUndock={handleUndock}
         soundEngine={soundEngineRef.current}
-        stationName={baseStationRef.current.name}
+        stationName={currentDockedEntity?.displayName || 'STARPORT VALIANT-PRIME'}
         activeShipId={activeShipId}
         onSelectShip={handleSelectShip}
       />
