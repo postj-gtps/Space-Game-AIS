@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { SoundEngine } from '../game/sound';
 import { AssetManager } from '../game/assets';
 import defaultShipStarterImg from '../../assets/images/ships/ship-starter.png';
+import defaultCometScoutImg from '../../assets/images/ships/Comet Scout.png';
 import defaultFreighterImg from '../../assets/images/ships/Freighter.png';
 
 export type StationView = 'CONCOURSE' | 'SHIP_DEALER' | 'BAR' | 'MISSION_COMPUTER' | 'MERCHANTS_HALL';
@@ -73,6 +74,30 @@ export const SHOWROOM_SHIPS: ShowroomShip[] = [
     ],
   },
   {
+    id: 'scout_02',
+    name: 'Comet Scout',
+    callsign: 'INTERCEPT-4 COMET',
+    role: 'HIGH-G INTERCEPT / FAST RECON',
+    description:
+      'Ultra-fast intercept scout engineered for blistering sublight speed and high-G evasion maneuvers. Sacrifices heavy armor for unmatched acceleration and turning velocity.',
+    image: defaultCometScoutImg,
+    stats: {
+      topSpeed: '9.8 kn (147 kn)',
+      thrust: '0.12 Twin-Core',
+      shields: 100,
+      hull: 60,
+      cargo: 5,
+      crew: 1,
+      laserCycle: '100 ms',
+      cost: 18000,
+    },
+    highlights: [
+      'Top sublight speed of 9.8 kn (+40% faster than Starlight Scout)',
+      'Hyper-agile 0.045 rad/frame turning rate for instant dogfight pivots',
+      'Twin forward nose plasma muzzles with rapid 100 ms cycle rate',
+    ],
+  },
+  {
     id: 'freighter_01',
     name: 'Scipia Freighter',
     callsign: 'HEAVY HAULER V-12',
@@ -106,11 +131,11 @@ const FACILITIES: Record<Exclude<StationView, 'CONCOURSE'>, FacilityInfo> = {
     tagline: 'Vessel showroom, custom hulls & outfitting',
     roomTitle: 'Orbital Ship Dealer & Outfitting Yard',
     subtitle: 'Bays 01-12 · Starship Procurement & Hull Upgrades',
-    statusBadge: 'SHOWROOM OPEN · 2 CHASSIS IN STOCK',
+    statusBadge: 'SHOWROOM OPEN · 3 CHASSIS IN STOCK',
     description:
       'The shipyard showroom floor is open for certified pilots. Browse the showroom floor to inspect technical specifications, swap chassis hulls, or commandeer new military and commercial vessels.',
     details: [
-      'Available Vessels: Starlight Scout [Interceptor] & Scipia Freighter [Heavy Transport]',
+      'Available Vessels: Starlight Scout [Interceptor], Comet Scout [Fast Recon], & Scipia Freighter [Heavy Transport]',
       'Services: Instant drydock hull transfer, subsystem synchronization, weapon mounting',
       'Notice: Authorized pilots can freely switch hulls in drydock with full shield recharge',
     ],
@@ -237,7 +262,11 @@ export const StationModal: React.FC<StationModalProps> = ({
           e.preventDefault();
           soundEngine.playMenuBeep(true);
           onSelectShip('starter_ship');
-        } else if (e.key === '2' || e.key.toLowerCase() === 'f') {
+        } else if (e.key === '2' || e.key.toLowerCase() === 'c') {
+          e.preventDefault();
+          soundEngine.playMenuBeep(true);
+          onSelectShip('scout_02');
+        } else if (e.key === '3' || e.key.toLowerCase() === 'f') {
           e.preventDefault();
           soundEngine.playMenuBeep(true);
           onSelectShip('freighter_01');
@@ -457,12 +486,12 @@ export const StationModal: React.FC<StationModalProps> = ({
                   </div>
                   <div className="text-xs font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-500/40 px-3 py-1 rounded flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>2 CHASSIS CERTIFIED & READY</span>
+                    <span>3 CHASSIS CERTIFIED & READY</span>
                   </div>
                 </div>
 
                 {/* Starship Showroom Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
                   {SHOWROOM_SHIPS.map((ship, idx) => {
                     const liveShip = AssetManager.getShip(ship.id);
                     const liveStats = liveShip?.stats;
@@ -484,6 +513,7 @@ export const StationModal: React.FC<StationModalProps> = ({
                     const isEquipped =
                       activeShipId === ship.id ||
                       (ship.id === 'starter_ship' && (activeShipId === 'scout_01' || activeShipId === 'scout')) ||
+                      (ship.id === 'scout_02' && (activeShipId === 'scout_02' || activeShipId === 'comet_scout' || activeShipId === 'comet')) ||
                       (ship.id === 'freighter_01' && (activeShipId === 'freighter_01' || activeShipId === 'freighter'));
 
                     return (

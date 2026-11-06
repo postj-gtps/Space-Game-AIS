@@ -1,5 +1,6 @@
 import { ShipsCatalog, ShipDefinition } from '../types/game';
 import defaultShipStarterImg from '../../assets/images/ships/ship-starter.png';
+import defaultCometScoutImg from '../../assets/images/ships/Comet Scout.png';
 import defaultFreighterImg from '../../assets/images/ships/Freighter.png';
 import defaultEnemyDroneImg from '../../assets/images/enemies/Enemy Drone.png';
 import defaultHostileDroneImg from '../../assets/images/enemies/Hostile Drone.png';
@@ -157,6 +158,90 @@ export class AssetManager {
         ],
       },
     },
+    scout_02: {
+      id: 'scout_02',
+      name: 'Comet Scout',
+      description:
+        'Intercept scout, very fast but lightly armed and armored. High-G evasion chassis with twin pulse muzzles and dual sublight thrusters.',
+      startingWeapons: ['weak_laser_cannon_1', 'weak_laser_cannon_1'],
+      sprite: {
+        src: defaultCometScoutImg,
+        scale: 0.11,
+        rotationOffset: 90,
+      },
+      stats: {
+        maxSpeed: 9.8,
+        thrustPower: 0.12,
+        reverseThrustPower: 0.08,
+        rotationSpeed: 0.045,
+        maxShields: 100,
+        maxHull: 60,
+        laserCooldown: 100,
+        laserHeatLimit: 100,
+        collisionRadius: 36,
+        cost: 18000,
+        crewCapacity: 1,
+        cargoCapacity: 5,
+      },
+      anchors: {
+        muzzles: [
+          { x: 50, y: -15 },
+          { x: 50, y: 15 },
+        ],
+        thrusters: [
+          { x: -48, y: -16, color: '#00f0ff' },
+          { x: -48, y: 16, color: '#00f0ff' },
+        ],
+        rcsJets: [
+          { x: 20, y: -24, color: '#ff9900' },
+          { x: 20, y: 24, color: '#ff9900' },
+          { x: -25, y: -35, color: '#ff9900' },
+          { x: -25, y: 35, color: '#ff9900' },
+        ],
+      },
+    },
+    comet_scout: {
+      id: 'comet_scout',
+      name: 'Comet Scout',
+      description:
+        'Intercept scout, very fast but lightly armed and armored. High-G evasion chassis with twin pulse muzzles and dual sublight thrusters.',
+      startingWeapons: ['weak_laser_cannon_1', 'weak_laser_cannon_1'],
+      sprite: {
+        src: defaultCometScoutImg,
+        scale: 0.11,
+        rotationOffset: 90,
+      },
+      stats: {
+        maxSpeed: 9.8,
+        thrustPower: 0.12,
+        reverseThrustPower: 0.08,
+        rotationSpeed: 0.045,
+        maxShields: 100,
+        maxHull: 60,
+        laserCooldown: 100,
+        laserHeatLimit: 100,
+        collisionRadius: 36,
+        cost: 18000,
+        crewCapacity: 1,
+        cargoCapacity: 5,
+      },
+      anchors: {
+        muzzles: [
+          { x: 50, y: -15 },
+          { x: 50, y: 15 },
+        ],
+        thrusters: [
+          { x: -48, y: -16, color: '#00f0ff' },
+          { x: -48, y: 16, color: '#00f0ff' },
+        ],
+        rcsJets: [
+          { x: 20, y: -24, color: '#ff9900' },
+          { x: 20, y: 24, color: '#ff9900' },
+          { x: -25, y: -35, color: '#ff9900' },
+          { x: -25, y: 35, color: '#ff9900' },
+        ],
+      },
+    },
   };
 
   public static async init(): Promise<void> {
@@ -214,6 +299,14 @@ export class AssetManager {
                 img.onload = () => resolve();
                 img.onerror = () => {
                   img.src = './assets/images/ships/Freighter.png';
+                  img.onload = () => resolve();
+                  img.onerror = () => resolve();
+                };
+              } else if (key === 'scout_02' || key === 'comet_scout' || key === 'comet') {
+                img.src = defaultCometScoutImg;
+                img.onload = () => resolve();
+                img.onerror = () => {
+                  img.src = './assets/images/ships/Comet%20Scout.png';
                   img.onload = () => resolve();
                   img.onerror = () => resolve();
                 };
@@ -371,6 +464,9 @@ export class AssetManager {
     if (id === 'scout' || id === 'scout_01') {
       return this.shipsCatalog['scout_01'] || this.shipsCatalog['starter_ship'] || this.fallbackCatalog['scout_01'] || this.fallbackCatalog['starter_ship'];
     }
+    if (id === 'scout_02' || id === 'comet_scout' || id === 'comet') {
+      return this.shipsCatalog['scout_02'] || this.shipsCatalog['comet_scout'] || this.fallbackCatalog['scout_02'] || this.fallbackCatalog['starter_ship'];
+    }
     if (id === 'freighter' || id === 'freighter_01') {
       return this.shipsCatalog['freighter_01'] || this.fallbackCatalog['freighter_01'] || this.fallbackCatalog['starter_ship'];
     }
@@ -381,6 +477,9 @@ export class AssetManager {
     if (id === 'scout' || id === 'scout_01') {
       return this.loadedImages['scout_01'] || this.loadedImages['starter_ship'];
     }
+    if (id === 'scout_02' || id === 'comet_scout' || id === 'comet') {
+      return this.loadedImages['scout_02'] || this.loadedImages['comet_scout'] || this.loadedImages['starter_ship'];
+    }
     if (id === 'freighter' || id === 'freighter_01') {
       return this.loadedImages['freighter_01'] || this.loadedImages['freighter'];
     }
@@ -389,8 +488,9 @@ export class AssetManager {
 
   public static getAllAvailableShips(): ShipDefinition[] {
     const scout = this.getShip('starter_ship');
+    const comet = this.getShip('scout_02');
     const freighter = this.getShip('freighter_01');
-    return [scout, freighter];
+    return [scout, comet, freighter];
   }
 
   public static getDroneImage(): HTMLImageElement | null {
